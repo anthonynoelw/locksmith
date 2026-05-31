@@ -1,0 +1,529 @@
+# This file specifies intentionally untracked files that git should ignore.
+# See https://git-scm.com/docs/gitignore
+
+# ============================================================================
+# Build Results & Compilation
+# ============================================================================
+
+# Compiled source code
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Intermediate & Compiler files
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.ldf
+*.ldb
+*.scc
+
+# Build lock files
+*.lock.json
+
+# ============================================================================
+# NuGet
+# ============================================================================
+
+# NuGet packages
+*.nupkg
+*.snupkg
+*.nuget.props
+*.nuget.targets
+
+# NuGet package directory
+packages/
+.nuget/
+
+# Package cache
+.nupkg.metadata
+.nupkg.sha512
+
+# ============================================================================
+# IDE & Editor Config
+# ============================================================================
+
+# Visual Studio
+.vs/
+.vscode/
+.idea/
+*.code-workspace
+
+# Rider
+.idea/
+*.sln.iml
+riderModule.iml
+*.rider.project
+
+# Visual Studio Code
+.vscode/
+.vscode-test/
+*.code-workspace
+jsconfig.json
+tsconfig.json
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Other
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp
+*.temp
+
+# ============================================================================
+# Testing & Coverage
+# ============================================================================
+
+# Test Results
+TestResults/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+OpenCover/
+
+# Code Coverage (OpenCover)
+coverage/
+coverage.opencover.xml
+*.opencover.xml
+
+# Code Coverage (xUnit)
+**/bin/CodeCoverage/
+**/.coverage/
+
+# NCrunch
+.nCrunchXML
+.nCrunch_*
+_NCrunch_*
+.crunchsolution.cachefile
+*_NCrunch_*
+
+# NUnit
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+
+# xUnit
+*.trx
+
+# ============================================================================
+# Publish & Build Output
+# ============================================================================
+
+# Publish
+PublishProfiles/
+*.publish.xml
+*.publishproj
+PublishOutput/
+publish/
+[Pp]ublished[Dd]ata/
+[Pp]ublish[Rr]esult*.json
+
+# Publish Web Package
+*.azurePubxml
+*.pubxml
+*.publishxml
+*.msix
+*.msixbundle
+*.appxbundle
+*.appx
+*.appxupload
+
+# FTP
+[Ff]tp/
+
+# Precompiled Web projects (ASP.NET)
+[Pp]recompiledWeb/
+_precompiledWeb/
+
+# MSBuild
+obj/
+bin/
+Debug/
+Release/
+
+# ============================================================================
+# Local Development
+# ============================================================================
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Local environment
+.env
+.env.local
+.env.*.local
+*.env.local
+launchSettings.json (regenerated during dev)
+
+# Database files
+*.mdf
+*.ldf
+*.ndf
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+LocalDB/
+
+# Logs
+Logs/
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================================================
+# Docker & Containerization
+# ============================================================================
+
+# Docker
+.docker/
+docker-compose.override.yml
+docker-sync/
+.dockerignore
+
+# Docker Compose
+docker-compose.override.yml
+
+# ============================================================================
+# Package Managers
+# ============================================================================
+
+# npm
+node_modules/
+npm-debug.log
+npm-error.log
+package-lock.json
+yarn.lock
+
+# pnpm
+pnpm-lock.yaml
+
+# ============================================================================
+# Sensitive Information
+# ============================================================================
+
+# API Keys & Credentials (CRITICAL: These must never be committed)
+*.key
+*.pem
+*.pfx
+*.p12
+secrets/
+.secrets/
+*.secrets.*
+appsettings.production.json
+appsettings.*.json (except appsettings.json & appsettings.Development.json)
+/appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production.local
+
+# SSH Keys
+.ssh/
+id_rsa
+id_rsa.pub
+known_hosts
+
+# AWS
+.aws/
+aws_credentials.json
+
+# Azure
+.azure/
+azure_credentials.json
+
+# Service Principal files
+*-credentials.json
+*-secret.json
+
+# ============================================================================
+# Build Tools & Scripts
+# ============================================================================
+
+# MSBuild
+*.sln.proj
+
+# Transitive build files
+[Tt]arget/
+[Pp]ackages/
+[Cc]ontainers/
+
+# ============================================================================
+# OpenCover (Code Coverage)
+# ============================================================================
+
+# OpenCover reports
+OpenCover/
+Coverage/
+coverage.xml
+CodeCoverage/
+**/CodeCoverage/
+
+# ============================================================================
+# Web & ASP.NET Core
+# ============================================================================
+
+# IIS
+.IIS4/
+.IIS5/
+.IIS6/
+.IIS7/
+iisexpress/
+
+# wwwroot
+wwwroot/dist/
+
+# ASP.NET Core
+*.mdf
+*.ldf
+*.ndf
+ClientBin/
+[Ss]ervice[Rr]eference/
+Generated_Code/
+
+# ============================================================================
+# C++ objects & libraries
+# ============================================================================
+
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.com
+*.class
+*.jar
+
+# ============================================================================
+# Temporary Files
+# ============================================================================
+
+*.temp
+*.tmp
+~$*
+.~lock.*
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================================================================
+# JetBrains IDEs (Rider, IntelliJ)
+# ============================================================================
+
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# ============================================================================
+# Visual Studio Cache/Options
+# ============================================================================
+
+.vs/
+.vscode/
+.vscode-test/
+
+# ============================================================================
+# Miscellaneous
+# ============================================================================
+
+# Custom collections
+.vs/
+VS.cache
+vs.db
+
+# Project & Solution
+.VisualState.xml
+.CodeAnalysisCache
+*.CodeAnalysisLog.xml
+*.CodeAnalysisState.xml
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# NCrunch
+.nCrunch*
+*nCrunch*
+_NCrunch_*
+NCrunchTemp_*
+
+# Installshield output
+[Ee]xpress/
+
+# InstallAware
+[Ii]nstall[Aa]ware/
+i5/
+
+# PowerShell ISE
+Out/
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode
+*.code-workspace
+
+# ============================================================================
+# Node dependencies (if using frontend tools)
+# ============================================================================
+
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# ============================================================================
+# Parcel (web bundler)
+# ============================================================================
+
+.cache/
+dist/
+
+# ============================================================================
+# Artifact Repositories (CI/CD Artifacts)
+# ============================================================================
+
+artifacts/
+releases/
+dist/
+build/
+
+# ============================================================================
+# Miscellaneous Build/Tool Artifacts
+# ============================================================================
+
+*.o
+*.a
+*.lib
+*.dylib
+*.dll
+*.exe
+*.exe.config
+*.com
+*.class
+*.jar
+*.zip
+*.gz
+*.rar
+*.7z
+*.tar
+
+# ============================================================================
+# Local Development & Testing
+# ============================================================================
+
+# Local test results
+TestResults/
+*.trx
+
+# Local run configuration
+run.sh
+run.bat
+run.ps1
+
+# Development databases
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================================================
+# Git
+# ============================================================================
+
+# Git patch files
+*.patch
+*.diff
+
+# ============================================================================
+# Repository-specific files
+# ============================================================================
+
+# Ignore everything in temp directories
+temp/
+tmp/
+.temp/
+.tmp/
+
+# Build output
+bin/
+obj/
+publish/
+
+# ============================================================================
+# NOTE: Be cautious with the following patterns
+# ============================================================================
+
+# If you need to version control specific files in ignored directories,
+# use patterns like:
+# !.gitkeep
+# !/logs/.gitkeep
+# !packages/NuGet.Config
+# !/packages/repos.config
+
+# To force add an ignored file:
+# git add -f path/to/file
+
+# To see what would be ignored:
+# git status --ignored
+# git check-ignore -v path/to/file

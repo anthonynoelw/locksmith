@@ -1,0 +1,250 @@
+# gitattributes: Enforce consistent line endings and diff behavior
+# See: https://git-scm.com/docs/gitattributes
+
+# ============================================================================
+# Auto-detect files by name and standardize line endings
+# ============================================================================
+
+# Auto-detect text files
+* text=auto
+
+# ============================================================================
+# Text Files - LF (Unix-style) for consistency
+# ============================================================================
+
+# C#
+*.cs text eol=lf
+*.csproj text eol=lf
+*.vbproj text eol=lf
+*.sln text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+
+# Configuration & Data
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.xml text eol=lf
+*.config text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+*.adoc text eol=lf
+
+# Scripts
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.fish text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Build & Scripting
+Dockerfile text eol=lf
+Makefile text eol=lf
+*.gradle text eol=lf
+*.maven text eol=lf
+*.mk text eol=lf
+
+# .NET specific
+*.resx text eol=lf
+*.resw text eol=lf
+*.ruleset text eol=lf
+.editorconfig text eol=lf
+stylecop.json text eol=lf
+.stylecop text eol=lf
+
+# Source control
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.gitkeep text eol=lf
+
+# Docker & Infrastructure
+docker-compose.yml text eol=lf
+docker-compose.yaml text eol=lf
+docker-compose.*.yml text eol=lf
+docker-compose.*.yaml text eol=lf
+.dockerignore text eol=lf
+
+# GitHub / GitLab / Gitea
+.github/** text eol=lf
+.gitlab-ci.yml text eol=lf
+.gitea/** text eol=lf
+
+# Other config files
+*.properties text eol=lf
+*.gradle text eol=lf
+*.cmake text eol=lf
+nuget.config text eol=lf
+NuGet.config text eol=lf
+package.json text eol=lf
+package-lock.json text eol=lf
+tsconfig.json text eol=lf
+.babelrc text eol=lf
+
+# HTML & Templates
+*.html text eol=lf
+*.htm text eol=lf
+*.template text eol=lf
+*.liquid text eol=lf
+*.cshtml text eol=lf
+*.vbhtml text eol=lf
+*.razor text eol=lf
+
+# CSS & SCSS
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.less text eol=lf
+
+# JavaScript & TypeScript
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+
+# ============================================================================
+# Binary Files - No conversion
+# ============================================================================
+
+# Compiled object files
+*.o binary
+*.obj binary
+*.a binary
+*.lib binary
+*.so binary
+*.dylib binary
+*.dll binary
+*.exe binary
+*.com binary
+
+# Archives
+*.zip binary
+*.gz binary
+*.gzip binary
+*.rar binary
+*.7z binary
+*.tar binary
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.bmp binary
+*.tiff binary
+*.webp binary
+
+# Fonts
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+
+# Audio & Video
+*.mp3 binary
+*.mp4 binary
+*.avi binary
+*.mov binary
+*.wav binary
+*.flac binary
+*.aac binary
+*.m4a binary
+*.webm binary
+
+# Documents
+*.pdf binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.ppt binary
+*.pptx binary
+*.odt binary
+
+# Databases
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.mdf binary
+*.ldf binary
+*.ndf binary
+
+# Archives & Packages
+*.nupkg binary
+*.snupkg binary
+*.jar binary
+*.class binary
+*.pyc binary
+
+# VS/IDE files
+*.sln.iml binary
+*.sln.docstates binary
+
+# ============================================================================
+# Diff & Merge Behavior
+# ============================================================================
+
+# Prevent binary files from showing diffs
+*.exe binary diff=exif merge=binary -text
+*.dll binary diff=exif merge=binary -text
+*.so binary diff=exif merge=binary -text
+*.dylib binary diff=exif merge=binary -text
+
+# Disable merge for common binary files
+*.docx binary merge=union
+*.xlsx binary merge=union
+*.pptx binary merge=union
+
+# ============================================================================
+# End Of File Enforcement
+# ============================================================================
+
+# Ensure newline at end of file for text files
+
+*.cs text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.xml text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+
+# ============================================================================
+# Normalize Whitespace (optional)
+# ============================================================================
+
+# Trim trailing whitespace (except Markdown where it's significant)
+*.cs whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
+*.json whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
+*.yaml whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
+*.xml whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
+*.html whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
+
+# Keep leading spaces in Markdown (soft breaks require 2 trailing spaces)
+*.md -whitespace
+
+# ============================================================================
+# Export Ignore (don't include in releases/archives)
+# ============================================================================
+
+.gitignore export-ignore
+.gitattributes export-ignore
+.github export-ignore
+.gitlab-ci.yml export-ignore
+.editorconfig export-ignore
+.stylecop.json export-ignore
+CHANGELOG.md export-ignore

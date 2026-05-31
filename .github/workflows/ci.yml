@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+  merge_group:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dotnet-version: ['10.0.x']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build solution
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run unit tests
+        run: dotnet test Tests/Unit/Unit.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx"
+
+      - name: Run integration tests
+        run: dotnet test Tests/Integration/Integration.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx"
+
+      - name: Run application tests
+        run: dotnet test Tests/Application/Application.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=application-tests.trx"
+
+      - name: Publish API
+        run: dotnet publish Src/Api/Api.csproj --no-build --configuration Release --output ./publish/api
+
+      - name: Publish Agent
+        run: dotnet publish Src/Agent/Agent.csproj --no-build --configuration Release --output ./publish/agent
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/unit-tests.trx
+            **/integration-tests.trx
+            **/application-tests.trx
+          retention-days: 30
+
+      - name: Upload publish artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-artifacts
+          path: ./publish
+          retention-days: 30
