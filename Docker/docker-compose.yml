@@ -6,10 +6,10 @@ services:
       context: ..
       dockerfile: Docker/Dockerfile
       args:
-        PROJECT_NAME: YourProject
-        PROJECT_PATH: Src/YourProject
+        PROJECT_NAME: Api
+        PROJECT_PATH: Src/Api
         DOTNET_VERSION: "10.0"
-    container_name: yourproject-api
+    container_name: locksmith-api
     ports:
       - "8080:8080"
     environment:
@@ -17,6 +17,21 @@ services:
       - ASPNETCORE_URLS=http://+:8080
     volumes:
       - ..:/app:cached
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile
+      args:
+        PROJECT_NAME: Agent
+        PROJECT_PATH: Src/Agent
+        DOTNET_VERSION: "10.0"
+    container_name: locksmith-worker
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    volumes:
+      - ..:/app:cached
+
     # Uncomment to enable hot reload during development
     # command: dotnet watch run --project Src/YourProject/YourProject.csproj
 
