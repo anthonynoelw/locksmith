@@ -1,18 +1,23 @@
 # .NET 10 Project Template
 
-A production-ready project template for building scalable .NET 10 applications with clean architecture, Docker support, and modern development practices. Use this as a starting point for new APIs, background services, or microservices.
+Locksmith is a self-contained ASP.NET Core Rest API service for secure API key lifecycle management.
 
 ## What you get
 
-### Architecture
+## Locksmith — Documentation Index
 
-A proven layered structure that scales with your project:
+Locksmith is an ASP.NET Core API that issues, rotates, and revokes API keys with
+HMAC-SHA256 hashing at rest and per-key rate limiting enforced at the middleware layer.
 
-- **Domain** — Core business logic, entities, and domain rules (no infrastructure dependencies)
-- **Application** — Use cases, business workflows, CQRS commands/queries (domain-focused)
-- **Infrastructure** — Data access, external services, configuration (technical implementation)
-- **Api** — ASP.NET Core web API with OpenAPI documentation
-- **Agent** — Background worker service for scheduled or event-driven work
+### Where to look for what
+
+| I want to understand... | Go to |
+|---|---|
+| What the system does and how it is structured | `architecture/overview.md` |
+| What endpoints exist and what they return | `architecture/api-surface.md` |
+| Why a specific technical decision was made | `decisions/` |
+| What I learned implementing each concept | `concepts/` |
+| What threats the design defends against | `security/threat-model.md` |
 
 ### Development tooling
 
@@ -21,7 +26,7 @@ A proven layered structure that scales with your project:
 - **Package management** — Centralised NuGet versions via `Directory.Packages.props`
 - **Setup automation** — One-command initialization script (`setup.sh` / `setup.bat`)
 
-### Infrastructure
+### DevOps
 
 - **Docker** — Multi-stage Dockerfile with health checks
 - **Docker Compose** — Local development environment configuration
@@ -83,21 +88,6 @@ docker-compose -f Docker/docker-compose.yml up
 
 ## What's included
 
-✅ **Already configured:**
-- Layered architecture with clear separation of concerns
-- StyleCop code style enforcement
-- Git hooks for Conventional Commits
-- Docker and Docker Compose setup
-- ASP.NET Core API with OpenAPI support
-- Background service template
-- HTTPS redirection
-- Serilog structured logging (enriched with machine name, environment, and HTTP request context)
-
-❌ **Intentionally left blank** (add as you need):
-- Domain models and entities
-- API endpoints and business logic
-- Worker implementation
-- Database schema and migrations
 
 ## Contributing
 
@@ -111,6 +101,21 @@ git commit -m "docs: update setup instructions"
 
 The setup script installs hooks that enforce this automatically.
 
+### Documentation expectations
+
+Any change that introduces or alters a design decision must be accompanied by
+an ADR in `docs/decisions/`. If you are unsure whether your change qualifies,
+ask yourself: "Would a reviewer reasonably wonder *why* I did it this way instead
+of another?" If yes, write the ADR.
+
+For smaller changes — a bug fix, a refactor that doesn't change behaviour, a
+dependency bump — no ADR is needed, but the relevant architecture doc should be
+updated if the change affects something it describes.
+
+A `docs:` commit type exists for exactly this purpose. A pull request that
+introduces a significant design decision without a corresponding ADR will not
+be merged.
+
 ## License
 
-MIT — See [LICENSE](../LICENSE)
+GPL — See [LICENSE](../LICENSE)

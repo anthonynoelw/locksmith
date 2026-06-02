@@ -6,7 +6,7 @@
 ### POST /api/keys
 Issues a new API key.
 
-**Request headers:** `Idempotency-Key: <uuid>`  
+**Request headers:** ``  
 **Request body:** `{ "ownerId": "string", "scopes": ["string"], "expiresInDays": int }`  
 **Response 201:** `{ "keyId": "guid", "key": "string", "expiresAt": "datetime" }`  
 **Response 409:** Idempotency key already used (returns original 201 body)
