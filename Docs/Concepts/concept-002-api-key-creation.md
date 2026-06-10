@@ -45,7 +45,6 @@ flowchart TD
 classDiagram
     class ApiKeys {
         +Guid IdempotencyKey
-        +string UserId
         +string ApiKeyHash
         +string Salt
         +DateTime CreatedAt

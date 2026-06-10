@@ -35,7 +35,6 @@ A Change happens when a a caller request some action that requires to change the
 classDiagram
     class ApiKeys {
         +Guid IdempotencyKey
-        +string UserId
         +string ApiKeyHash
         +DateTime CreatedAt
         +DateTime UpdatedAt

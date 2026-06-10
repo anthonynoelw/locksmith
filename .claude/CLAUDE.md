@@ -144,9 +144,6 @@ Conventional Commits are enforced by a commitlint Git hook installed via `setup.
 
 Key items not yet implemented that new features will likely need:
 - EF Core DbContext + migrations
-- MediatR (CQRS) + FluentValidation pipeline
 - Repository pattern (`IRepository<T>`, `IUnitOfWork`)
-- ~~Health check endpoints (`/health`, `/health/ready`)~~ ✓ implemented
-- CORS configuration
 - OpenTelemetry traces + metrics
-- Scalar/Swagger UI (OpenAPI docs already generated)
+- OpenApi 
