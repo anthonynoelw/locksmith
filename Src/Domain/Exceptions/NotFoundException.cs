@@ -17,4 +17,12 @@ public sealed class NotFoundException : DomainException
         : base(message, innerException)
     {
     }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NotFoundException"/> class.
+    /// </summary>
+    public NotFoundException()
+        : base()
+    {
+    }
 }

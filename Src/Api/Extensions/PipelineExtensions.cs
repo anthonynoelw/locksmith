@@ -54,7 +54,7 @@ internal static class PipelineExtensions
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             // Readiness: runs only checks tagged "ready" (EF Core, Redis, etc.).
-            Predicate = check => check.Tags.Contains(WellKnown.HealthCheckTags.Ready),
+            Predicate = check => check.Tags.Contains(WellKnown.HealthCheckTags.READY),
             ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse,
         });
 

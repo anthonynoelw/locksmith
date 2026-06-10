@@ -1,11 +1,13 @@
 namespace Api.Extensions;
 
 using Asp.Versioning;
+using Microsoft.EntityFrameworkCore;
 
 using Api.Exceptions;
 using Api.OpenApi;
 using Api.Settings;
 using Domain;
+using Infrastructure.Data;
 
 /// <summary>
 /// Extension methods for registering application services on <see cref="IHostApplicationBuilder"/>.
@@ -50,9 +52,25 @@ internal static class ServiceExtensions
 
         builder.Services
             .AddOptions<ApiSettings>()
-            .BindConfiguration(WellKnown.ConfigSections.Api)
+            .BindConfiguration(WellKnown.ConfigSections.API)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Registers the application database context and configures PostgreSQL connectivity.
+    /// </summary>
+    /// <param name="builder">The host application builder.</param>
+    /// <returns>The same <paramref name="builder"/> instance for chaining.</returns>
+    internal static IHostApplicationBuilder AddInfrastructureServices(this IHostApplicationBuilder builder)
+    {
+        string connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseNpgsql(connectionString));
 
         return builder;
     }

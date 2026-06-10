@@ -19,7 +19,7 @@ internal static class ServiceExtensions
 
         builder.Services
             .AddOptions<AgentSettings>()
-            .BindConfiguration(WellKnown.ConfigSections.Agent)
+            .BindConfiguration(WellKnown.ConfigSections.AGENT)
             .ValidateDataAnnotations()
             .ValidateOnStart();
 

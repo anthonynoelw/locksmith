@@ -17,4 +17,12 @@ public abstract class DomainException : Exception
         : base(message, innerException)
     {
     }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DomainException"/> class.
+    /// </summary>
+    protected DomainException()
+        : base()
+    {
+    }
 }

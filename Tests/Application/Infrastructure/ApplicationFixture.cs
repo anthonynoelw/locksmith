@@ -3,6 +3,7 @@ namespace Application.Infrastructure;
 using Api;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
@@ -38,6 +39,16 @@ public sealed class ApplicationFixture : IAsyncLifetime
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Development");
+
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    var testSettings = new Dictionary<string, string?>
+                    {
+                        { "Api:Name", "Test API" },
+                        { "Api:BearerToken", "test-bearer-token" },
+                    };
+                    config.AddInMemoryCollection(testSettings);
+                });
 
                 builder.ConfigureServices(services =>
                 {

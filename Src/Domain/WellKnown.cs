@@ -9,11 +9,11 @@ public static class WellKnown
     /// </summary>
     public static class ConfigSections
     {
-        /// <summary>The "Api" configuration section (Api project settings).</summary>
-        public const string Api = "Api";
+        /// <summary>The "API" configuration section (API project settings).</summary>
+        public const string API = "API";
 
-        /// <summary>The "Agent" configuration section (Agent project settings).</summary>
-        public const string Agent = "Agent";
+        /// <summary>The "AGENT" configuration section (AGENT project settings).</summary>
+        public const string AGENT = "AGENT";
     }
 
     /// <summary>
@@ -27,6 +27,6 @@ public static class WellKnown
     public static class HealthCheckTags
     {
         /// <summary>Marks a check as a readiness dependency. Runs under <c>GET /health/ready</c>.</summary>
-        public const string Ready = "ready";
+        public const string READY = "READY";
     }
 }

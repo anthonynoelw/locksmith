@@ -26,6 +26,7 @@ public partial class Program
             WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
             builder.AddSerilogLogging();
+            builder.AddInfrastructureServices();
             builder.AddApiServices();
 
             WebApplication app = builder.Build();

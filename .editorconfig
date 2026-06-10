@@ -256,6 +256,22 @@ dotnet_diagnostic.SA1202.severity = none
 dotnet_diagnostic.SA1010.severity = none
 dotnet_diagnostic.CA1707.severity = none
 
+#### EF Core Migrations — auto-generated code ####
+
+[**/Migrations/*.cs]
+# Trailing comma style — not required in generated code
+dotnet_diagnostic.SA1413.severity = none
+# Various style suggestions not applicable to generated code
+dotnet_diagnostic.IDE0002.severity = none
+dotnet_diagnostic.IDE0004.severity = none
+dotnet_diagnostic.IDE0005.severity = none
+dotnet_diagnostic.IDE0010.severity = none
+dotnet_diagnostic.IDE0016.severity = none
+dotnet_diagnostic.IDE0020.severity = none
+dotnet_diagnostic.IDE0027.severity = none
+dotnet_diagnostic.IDE0028.severity = none
+dotnet_diagnostic.IDE0033.severity = none
+
 #### Data / Config Files ####
 
 [*.json]

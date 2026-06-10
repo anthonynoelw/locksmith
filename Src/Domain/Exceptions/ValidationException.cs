@@ -35,6 +35,21 @@ public sealed class ValidationException : DomainException
         Errors = errors;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ValidationException"/> class.
+    /// </summary>
+    public ValidationException()
+        : base()
+    {
+        Errors = new Dictionary<string, string[]>();
+    }
+
+    private ValidationException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+        Errors = new Dictionary<string, string[]>();
+    }
+
     /// <summary>Gets the field-level validation errors.</summary>
     /// <value>
     /// A read-only dictionary where each key is a field name and each value is

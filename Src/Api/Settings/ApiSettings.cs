@@ -14,4 +14,9 @@ public sealed class ApiSettings
     [Required]
     [StringLength(256, MinimumLength = 1)]
     public required string Name { get; init; }
+
+    /// <summary>Gets or initializes the bearer token for the API.</summary>
+    [Required]
+    [StringLength(256, MinimumLength = 1)]
+    public required string BearerToken { get; init; }
 }

@@ -17,13 +17,12 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Domain Entities
 
-- [ ] `ApiKey`
-- [ ] `ApiKeyStatus`
-- [ ] `ApiKeyAction`
+- [x] `ApiKey`
+- [x] `ApiKeyStatus`
+- [x] `ApiKeyAction`
 
-- [ ] `ApiKeyStatusEnum` — `Inactive`, `Active`, `Revoked`, `Expired`
-- [ ] `ApiKeyActionEnum` — `Read`, `Write`, `Delete`, `Execute`
-- [ ] 
+- [x] `ApiKeyStatusEnum` — `Inactive`, `Active`, `Revoked`, `Expired`
+- [x] `ApiKeyActionEnum` — `Read`, `Write`, `Delete`, `Execute`
 - [ ] State transition guard — only allow valid transitions (`Inactive → Active`, `Active → Inactive`, `Active/Inactive → Revoked`); throw `ConflictException` on invalid transitions
 
 ### Cryptography
@@ -36,9 +35,9 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Data Access
 
-- [ ] EF Core `AppDbContext` in `Infrastructure` — entity configurations for `ApiKey`, `ApiKeyStatus`, `ApiKeyAction`
-- [ ] Append-only constraint on `ApiKeyStatus` — no `Update` or `Delete` allowed through the context
-- [ ] Unique index on `ApiKey.IdempotencyKey`
+- [x] EF Core `AppDbContext` in `Infrastructure` — entity configurations for `ApiKey`, `ApiKeyStatus`, `ApiKeyAction`
+- [X] Append-only constraint on `ApiKeyStatus` — no `Update` or `Delete` allowed through the context
+- [X] Unique index on `ApiKey.IdempotencyKey`
 - [ ] Initial migration — creates `api_keys`, `api_key_statuses`, `api_key_actions` tables
 - [ ] Repository interfaces in `Application` — `IApiKeyRepository`, `IApiKeyStatusRepository`, `IApiKeyActionRepository`
 - [ ] Repository implementations in `Infrastructure`
