@@ -42,7 +42,7 @@ Domain ← Application ← Infrastructure ← Api
 ```
 
 - **Domain** (`Src/Domain/`) — Business entities, domain exceptions, pure .NET with no external dependencies.
-- **Application** (`Src/Application/`) — Use cases, CQRS handlers, validators. Currently empty; intended for MediatR commands/queries when added.
+- **Application** (`Src/Application/`) — Use cases, application services, validators. Currently empty.
 - **Infrastructure** (`Src/Infrastructure/`) — Data access, external service clients. Currently empty; EF Core + repositories are a planned addition.
 - **Api** (`Src/Api/`) — ASP.NET Core 10 MVC controller-based API. Hosts REST endpoints, OpenAPI, versioning, Serilog, and global exception handling.
 - **Agent** (`Src/Agent/`) — Separate Worker Service executable for background jobs and scheduled tasks. Shares no startup code with Api.

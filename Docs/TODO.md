@@ -13,7 +13,7 @@ Core functionality and security-critical items required before Locksmith can be 
 - [ ] Static bearer token middleware — reject any management request missing or mismatching `Authorization: Bearer <token>` with a `401` before any handler runs
 - [ ] Use `CryptographicOperations.FixedTimeEquals` for token comparison (constant-time, no timing attacks)
 - [ ] Inject token via environment variable / secrets manager; add `[Required]` validation to `ApiSettings`
-- [ ] Exempt `/health` and `/health/ready` from authentication (route-based, not wildcard bypass)
+- [x] Exempt `/health` and `/health/ready` from authentication (route-based, not wildcard bypass)
 
 ### Domain Entities
 
@@ -47,17 +47,17 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Application Layer 
 
-- [ ] `CreateApiKeyCommand` + handler — generate key, hash, encrypt, persist, return raw key once
-- [ ] `GetApiKeyQuery` + handler — return metadata (no raw key)
-- [ ] `GetApiKeySecretQuery` + handler — decrypt and return raw key
-- [ ] `PatchApiKeyStatusCommand` + handler — validate transition, append status row
-- [ ] `RotateApiKeyCommand` + handler — generate new secret, re-encrypt, re-hash, append status row atomically
-- [ ] `RevokeApiKeyCommand` + handler — append `Revoked` status row; soft-delete semantics
-- [ ] `ListApiKeyActionsQuery` + handler
-- [ ] `ReplaceApiKeyActionsCommand` + handler — diff current vs. new set; delete removed, insert added
-- [ ] `GrantApiKeyActionCommand` + handler — insert single action; throw `ConflictException` if already granted
-- [ ] `RevokeApiKeyActionCommand` + handler — delete single action; throw `NotFoundException` if not present
-- [ ] FluentValidation validators for all commands
+- [ ] `CreateApiKey` service — generate key, hash, encrypt, persist, return raw key once
+- [ ] `GetApiKey` service — return metadata (no raw key)
+- [ ] `GetApiKeySecret` service — decrypt and return raw key
+- [ ] `PatchApiKeyStatus` service — validate transition, append status row
+- [ ] `RotateApiKey` service — generate new secret, re-encrypt, re-hash, append status row atomically
+- [ ] `RevokeApiKey` service — append `Revoked` status row; soft-delete semantics
+- [ ] `ListApiKeyActions` service
+- [ ] `ReplaceApiKeyActions` service — diff current vs. new set; delete removed, insert added
+- [ ] `GrantApiKeyAction` service — insert single action; throw `ConflictException` if already granted
+- [ ] `RevokeApiKeyAction` service — delete single action; throw `NotFoundException` if not present
+- [ ] FluentValidation validators for all operations
 
 ### Idempotency
 
