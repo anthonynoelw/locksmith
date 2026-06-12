@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     build:
@@ -51,7 +49,7 @@ services:
   #     - ..:/app:cached
 
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18.4-alpine
     container_name: locksmith-db
     environment:
       POSTGRES_USER: postgres
@@ -60,7 +58,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
