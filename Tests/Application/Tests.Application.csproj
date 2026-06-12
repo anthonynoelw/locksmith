@@ -12,6 +12,7 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="StyleCop.Analyzers" />
     <PackageReference Include="xunit" />
@@ -29,5 +30,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Src\Api\Api.csproj" />
+    <ProjectReference Include="..\..\Src\Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 </Project>
