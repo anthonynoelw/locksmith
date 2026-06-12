@@ -1,0 +1,59 @@
+namespace Infrastructure;
+
+using Application.Interfaces;
+using Application.Interfaces.Repositories;
+using Infrastructure.Data;
+using Infrastructure.Repositories;
+
+/// <summary>
+/// Provides transaction and repository coordination for data access operations.
+/// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="UnitOfWork"/> class.
+/// </remarks>
+public sealed class UnitOfWork(AppDbContext dbContext) : IUnitOfWork
+{
+    private IApiKeyRepository? _apiKeyRepository;
+    private IApiKeyStatusRepository? _apiKeyStatusRepository;
+    private IApiKeyActionRepository? _apiKeyActionRepository;
+    private bool _disposed;
+
+    /// <summary>
+    /// Gets the repository for API Key operations.
+    /// </summary>
+    public IApiKeyRepository ApiKeys => _apiKeyRepository ??= new ApiKeyRepository(dbContext);
+
+    /// <summary>
+    /// Gets the repository for API Key status history operations.
+    /// </summary>
+    public IApiKeyStatusRepository ApiKeyStatuses => _apiKeyStatusRepository ??= new ApiKeyStatusRepository(dbContext);
+
+    /// <summary>
+    /// Gets the repository for API Key action permission operations.
+    /// </summary>
+    public IApiKeyActionRepository ApiKeyActions => _apiKeyActionRepository ??= new ApiKeyActionRepository(dbContext);
+
+    /// <summary>
+    /// Saves all pending changes to the database within the current transaction.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The number of state entries written to the database.</returns>
+    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        return await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Disposes the unit of work and its associated database context.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        await dbContext.DisposeAsync();
+        _disposed = true;
+    }
+}
