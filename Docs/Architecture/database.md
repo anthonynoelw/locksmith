@@ -13,7 +13,7 @@ erDiagram
     
     API_KEYS {
         uuid id PK
-        uuid idempotency_key UK
+        string idempotency_key_has UK
         string key_hash
         string salt
         timestamp created_at
@@ -49,7 +49,7 @@ The identity and metadata table for API keys. A key record is created once at is
 | Column | Type | Constraints | Purpose |
 |---|---|---|---|
 | `id` | UUID | Primary Key | Unique identifier for the key |
-| `idempotency_key` | UUID | Unique, Not Null | Prevents duplicate key creation on retry; extracted from `Idempotency-Key` header |
+| `idempotency_key_hash` | string | Unique, Not Null | Prevents duplicate key creation on retry; extracted from `Idempotency-Key` header |
 | `key_hash` | VARCHAR(256) | Not Null | PBKDF2 or Argon2 hash of the raw secret + salt. Used for validation; the raw secret is never persisted. |
 | `salt` | VARCHAR(64) | Not Null | Random salt used in the hash function; enables per-key salting for resistance against rainbow tables |
 | `created_at` | TIMESTAMP | Not Null, Default: NOW | Moment the key was issued |

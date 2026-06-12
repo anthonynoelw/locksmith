@@ -27,17 +27,17 @@ ARG PROJECT_PATH
 RUN dotnet publish "${PROJECT_PATH}/${PROJECT_NAME}.csproj" -c Release -o /app/publish /p:UseAppHost=false --no-build
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS final
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION}-alpine AS final
 WORKDIR /app
 
-# Create non-root user
-RUN groupadd -r dotnetapp && useradd -r -g dotnetapp dotnetapp
+# Create non-root user with minimal privileges
+RUN addgroup -S -g 1000 dotnetapp && adduser -S -u 1000 -G dotnetapp dotnetapp
 
 # Copy published application from publish stage
 COPY --from=publish /app/publish .
 
-# Set ownership of app files to non-root user
-RUN chown -R dotnetapp:dotnetapp /app
+# Set ownership of app files to non-root user with restricted permissions
+RUN chown -R dotnetapp:dotnetapp /app && chmod -R u+rX,go-rwx /app
 
 # Switch to non-root user
 USER dotnetapp
@@ -47,7 +47,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD dotnet --version > /dev/null && curl -f http://localhost:8080/health || exit 1
 
 # Run the application
 ARG PROJECT_NAME
