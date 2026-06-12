@@ -3,8 +3,10 @@ namespace Application.Infrastructure;
 using Api;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 
 /// <summary>
 /// Shared fixture that boots the full application once per test collection.
@@ -46,6 +48,7 @@ public sealed class ApplicationFixture : IAsyncLifetime
                     {
                         { "Api:Name", "Test API" },
                         { "Api:BearerToken", "test-bearer-token" },
+                        { "ConnectionStrings:Redis", "localhost:6379,abortConnect=false" },
                     };
                     config.AddInMemoryCollection(testSettings);
                 });
@@ -56,6 +59,25 @@ public sealed class ApplicationFixture : IAsyncLifetime
                     // discovers TestController alongside the production controllers.
                     services.AddMvc()
                         .AddApplicationPart(typeof(ApplicationFixture).Assembly);
+
+                    // Replace Redis with in-memory distributed cache for tests.
+                    List<ServiceDescriptor> cacheDescriptors = services.Where(d => d.ServiceType == typeof(IDistributedCache)).ToList();
+                    foreach (ServiceDescriptor descriptor in cacheDescriptors)
+                    {
+                        services.Remove(descriptor);
+                    }
+
+                    services.AddDistributedMemoryCache();
+
+                    // Use Redis with abortConnect=false so tests can run without a live Redis instance.
+                    List<ServiceDescriptor> connectionDescriptors = services.Where(d => d.ServiceType == typeof(IConnectionMultiplexer)).ToList();
+                    foreach (ServiceDescriptor descriptor in connectionDescriptors)
+                    {
+                        services.Remove(descriptor);
+                    }
+
+                    services.AddSingleton<IConnectionMultiplexer>(
+                        ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false"));
                 });
             });
 

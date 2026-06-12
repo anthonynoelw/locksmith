@@ -17,6 +17,19 @@ public static class WellKnown
     }
 
     /// <summary>
+    /// Connection string keys used to retrieve values from the configuration.
+    /// Reference these when calling <c>configuration.GetConnectionString(ConnectionStringKeys.X)</c>.
+    /// </summary>
+    public static class ConnectionStringKeys
+    {
+        /// <summary>The default database connection string (Postgres).</summary>
+        public const string DEFAULT = "DefaultConnection";
+
+        /// <summary>The Redis connection string for caching and distributed state.</summary>
+        public const string REDIS = "Redis";
+    }
+
+    /// <summary>
     /// Tag constants used to categorise health checks by probe type.
     /// Attach these when registering infrastructure checks:
     /// <code>

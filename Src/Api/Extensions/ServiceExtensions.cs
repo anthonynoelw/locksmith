@@ -48,8 +48,12 @@ internal static class ServiceExtensions
         builder.Services.AddProblemDetails();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
+        string redisConnectionString = builder.Configuration.GetConnectionString(WellKnown.ConnectionStringKeys.REDIS)
+            ?? throw new InvalidOperationException("Connection string 'Redis' not found.");
+
         builder.Services.AddHealthChecks()
-            .AddDbContextCheck<AppDbContext>(tags: new[] { WellKnown.HealthCheckTags.READY });
+            .AddDbContextCheck<AppDbContext>(tags: new[] { WellKnown.HealthCheckTags.READY })
+            .AddRedis(redisConnectionString, tags: new[] { WellKnown.HealthCheckTags.READY });
 
         builder.Services
             .AddOptions<ApiSettings>()
