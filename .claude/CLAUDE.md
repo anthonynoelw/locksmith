@@ -138,7 +138,15 @@ Enforced at build time via `.editorconfig` + `StyleCop.Analyzers` + `EnforceCode
 
 ## Commit conventions
 
+**Before every commit, the build and all tests must succeed with no errors or critical warnings.**
+
 Conventional Commits are enforced by a commitlint Git hook installed via `setup.sh`. Release-please uses commit history to auto-generate CHANGELOG and version bumps on merge to `main`.
+
+Run the following before committing:
+```bash
+dotnet build
+dotnet test
+```
 
 ## Roadmap (Docs/TODO.md highlights)
 
