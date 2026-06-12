@@ -1,6 +1,7 @@
 namespace Api;
 
 using Api.Extensions;
+using Infrastructure.Extensions;
 
 using Serilog;
 
@@ -26,7 +27,7 @@ public partial class Program
             WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
             builder.AddSerilogLogging();
-            builder.AddInfrastructureServices();
+            builder.AddInfrastructure();
             builder.AddApiServices();
 
             WebApplication app = builder.Build();

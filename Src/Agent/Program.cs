@@ -1,7 +1,7 @@
 namespace Agent;
 
 using Agent.Extensions;
-
+using Infrastructure.Extensions;
 using Serilog;
 
 /// <summary>
@@ -27,6 +27,7 @@ public static class Program
 
             builder.AddSerilogLogging();
             builder.AddAgentServices();
+            builder.AddInfrastructure();
 
             IHost host = builder.Build();
             host.Run();
