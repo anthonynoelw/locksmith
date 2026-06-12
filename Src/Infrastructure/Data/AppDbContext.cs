@@ -12,8 +12,13 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 /// <remarks>
 /// Initializes a new instance of the <see cref="AppDbContext"/> class.
 /// </remarks>
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options, string? databaseUser = null) : DbContext(options)
 {
+    /// <summary>
+    /// Gets the database user name used for setting up constraints and permissions.
+    /// </summary>
+    public string DatabaseUser { get; } = databaseUser ?? "postgres";
+
     /// <summary>
     /// Gets or sets the API keys.
     /// </summary>
@@ -83,14 +88,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     private void ValidateAppendOnlyConstraints()
     {
         var violations = ChangeTracker.Entries()
-            .Where(e => e.Entity is IAppendOnlyTable && (e.State == EntityState.Modified || e.State == EntityState.Deleted))
+            .Where(e => e.Entity is IAppendOnlyTable && e.State == EntityState.Deleted)
             .ToList();
 
         if (violations.Count > 0)
         {
             EntityEntry? firstViolation = violations[0];
-            string operation = firstViolation.State == EntityState.Deleted ? "Delete" : "Update";
-            throw new AppendOnlyViolationException(firstViolation.Entity.GetType().Name, operation);
+            throw new AppendOnlyViolationException(firstViolation.Entity.GetType().Name, "Delete");
+        }
+
+        var modifiedAppendOnlyEntries = ChangeTracker.Entries()
+            .Where(e => e.Entity is IAppendOnlyTable && e.State == EntityState.Modified)
+            .ToList();
+
+        foreach (EntityEntry entry in modifiedAppendOnlyEntries)
+        {
+            var modifiedProperties = entry.Properties
+                .Where(p => p.IsModified && p.Metadata.Name != "DeletedAt")
+                .ToList();
+
+            if (modifiedProperties.Count > 0)
+            {
+                throw new AppendOnlyViolationException(entry.Entity.GetType().Name, "Update");
+            }
         }
     }
 }

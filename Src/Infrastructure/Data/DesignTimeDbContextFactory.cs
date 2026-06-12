@@ -25,8 +25,10 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
         string connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found in appsettings.json");
 
+        string? databaseUser = configuration.GetSection("Database:User").Value;
+
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
         optionsBuilder.UseNpgsql(connectionString);
-        return new AppDbContext(optionsBuilder.Options);
+        return new AppDbContext(optionsBuilder.Options, databaseUser);
     }
 }

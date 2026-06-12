@@ -33,6 +33,11 @@ public class ApiKeyStatus : IAppendOnlyTable
     public required string CreatedBy { get; init; }
 
     /// <summary>
+    /// Gets or sets the date and time the API key status was soft-deleted.
+    /// </summary>
+    public DateTime? DeletedAt { get; set; }
+
+    /// <summary>
     /// Gets the API key for the API key status.
     /// </summary>
     /// <remarks>
