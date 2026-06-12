@@ -39,11 +39,11 @@ Core functionality and security-critical items required before Locksmith can be 
 - [X] Append-only constraint on `ApiKeyStatus` — no `Update` or `Delete` allowed through the context
 - [X] Unique index on `ApiKey.IdempotencyKey`
 - [x] Initial migration — creates `api_keys`, `api_key_statuses`, `api_key_actions` tables
-- [ ] Repository interfaces in `Application` — `IApiKeyRepository`, `IApiKeyStatusRepository`, `IApiKeyActionRepository`
-- [ ] Repository implementations in `Infrastructure`
-- [ ] `IUnitOfWork` interface and implementation
-- [ ] Register DbContext and repositories in `Infrastructure` service extensions
-- [ ] Wire EF Core readiness health check tagged `"ready"`
+- [x] Repository interfaces in `Application` — `IApiKeyRepository`, `IApiKeyStatusRepository`, `IApiKeyActionRepository`
+- [x] Repository implementations in `Infrastructure`
+- [x] `IUnitOfWork` interface and implementation
+- [x] Register DbContext and repositories in `Infrastructure` service extensions
+- [x] Wire EF Core readiness health check tagged `"ready"`
 
 ### Application Layer 
 
