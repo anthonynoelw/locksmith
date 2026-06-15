@@ -30,6 +30,65 @@ dotnet run --project Src/Agent/Agent.csproj
 ./setup.sh
 ```
 
+## Configuration & Environment Variables
+
+All application settings use `IOptions<T>` pattern with configuration validation at startup.
+
+### Local Development Setup
+
+**Development environment** uses `appsettings.Development.json`:
+```bash
+# Just run — connection strings are in appsettings.Development.json
+dotnet run --project Src/Api/Api.csproj
+```
+
+**OR use environment variables** (override appsettings):
+```bash
+export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=locksmith;Username=postgres;Password=..."
+export ConnectionStrings__Redis="localhost:6379"
+dotnet run --project Src/Api/Api.csproj
+```
+
+### Docker Compose Setup
+
+**`.env` file** (for Docker Compose only):
+- Automatically read by `docker-compose.yml`
+- Configures database versions, ports, and app environment variables
+- Copy `.env.example` to `.env` and customize:
+  ```bash
+  cp .env.example .env
+  # Edit .env with your values
+  docker-compose up
+  ```
+
+### Production / Staging Deployment
+
+Set environment variables directly (no `.env` files):
+```bash
+export ConnectionStrings__DefaultConnection="Host=prod-db.example.com;Port=5432;Database=locksmith_prod;Username=postgres;Password=..."
+export ConnectionStrings__Redis="redis.example.com:6379"
+export Api__BearerToken="your-bearer-token"
+export Cryptography__Iterations=8
+dotnet run --project Src/Api/Api.csproj
+```
+
+Or create `appsettings.Production.json` (keep out of version control):
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=prod-db.example.com;...",
+    "Redis": "redis.example.com:6379"
+  }
+}
+```
+
+**Summary:**
+| Environment | Config File | Notes |
+|---|---|---|
+| Local dev | `appsettings.Development.json` | Not version-controlled |
+| Docker | `.env` | Auto-read by docker-compose.yml |
+| Production | Environment variables OR `appsettings.Production.json` | Never commit secrets |
+
 ## Architecture
 
 This is a **Clean Architecture** solution using **Vertical Slice Architecture** targeting **.NET 10** with five layers and two executables.

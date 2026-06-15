@@ -9,10 +9,10 @@ services:
         DOTNET_VERSION: "10.0"
     container_name: locksmith-api
     ports:
-      - "8080:8080"
+      - "${API_HOST_PORT}:${API_CONTAINER_PORT}"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:8080
+      - ASPNETCORE_URLS=https://+:${API_CONTAINER_PORT}
     volumes:
       - ..:/app:cached
     depends_on:
@@ -40,8 +40,8 @@ services:
       redis:
         condition: service_healthy
 
-    # Uncomment to enable hot reload during development
-    # command: dotnet watch run --project Src/YourProject/YourProject.csproj
+  # Uncomment to enable hot reload during development
+  # command: dotnet watch run --project Src/YourProject/YourProject.csproj
 
   # Example: Build a different project (e.g., background worker)
   # worker:
@@ -59,27 +59,27 @@ services:
   #     - ..:/app:cached
 
   postgres:
-    image: postgres:18.4-alpine
+    image: postgres:${POSTGRES_VERSION}-alpine
     container_name: locksmith-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: locksmith
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT}:${POSTGRES_CONTAINER_PORT}"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:${REDIS-VERSION}-alpine
     container_name: locksmith-redis
     ports:
-      - "6379:6379"
+      - "{REDIS_HOST_PORT}:${POSTGRES_CONTAINER_PORT}"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
