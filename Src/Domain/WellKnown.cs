@@ -14,6 +14,9 @@ public static class WellKnown
 
         /// <summary>The "AGENT" configuration section (AGENT project settings).</summary>
         public const string AGENT = "AGENT";
+
+        /// <summary>The "Cryptography" configuration section (crypto/key-derivation settings).</summary>
+        public const string CRYPTOGRAPHY = "Cryptography";
     }
 
     /// <summary>

@@ -1,12 +1,12 @@
-﻿using System;
+﻿namespace Infrastructure.Migrations;
+
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Infrastructure.Migrations
-{
-    /// <inheritdoc />
-    public partial class RenameIdempotencyKeyColumn : Migration
+/// <inheritdoc />
+public partial class RenameIdempotencyKeyColumn : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -24,7 +24,7 @@ namespace Infrastructure.Migrations
                 table: "ApiKeys",
                 type: "text",
                 nullable: false,
-                defaultValue: "");
+                defaultValue: string.Empty);
 
             migrationBuilder.CreateIndex(
                 name: "IX_ApiKeys_IdempotencyKeyHash",
@@ -58,4 +58,3 @@ namespace Infrastructure.Migrations
                 unique: true);
         }
     }
-}

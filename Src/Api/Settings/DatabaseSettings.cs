@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations;
 /// <summary>
 /// Database configuration settings.
 /// </summary>
-public class DatabaseSettings
+public sealed class DatabaseSettings
 {
     /// <summary>
     /// Configuration section name.

@@ -63,18 +63,35 @@ public sealed class ApiKeyRepository(AppDbContext db) : IApiKeyRepository
     }
 
     /// <summary>
-    /// Soft-deletes an existing API Key by setting its DeletedAt timestamp.
+    /// Soft-deletes an existing API Key by marking its related statuses and actions as deleted.
     /// </summary>
     /// <param name="id">The API Key identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        ApiKey? apiKey = await db.ApiKeys.FirstOrDefaultAsync(k => k.Id == id, ct);
-        if (apiKey is not null)
+        List<ApiKeyStatus> statuses = await db.ApiKeyStatuses
+            .Where(s => s.ApiKeyId == id && s.DeletedAt == null)
+            .ToListAsync(ct);
+
+        List<ApiKeyAction> actions = await db.ApiKeyActions
+            .Where(a => a.ApiKeyId == id && a.DeletedAt == null)
+            .ToListAsync(ct);
+
+        if (statuses.Count > 0 || actions.Count > 0)
         {
-            apiKey.DeletedAt = DateTime.UtcNow;
-            db.ApiKeys.Update(apiKey);
+            foreach (ApiKeyStatus status in statuses)
+            {
+                status.DeletedAt = DateTime.UtcNow;
+            }
+
+            foreach (ApiKeyAction action in actions)
+            {
+                action.DeletedAt = DateTime.UtcNow;
+            }
+
+            db.ApiKeyStatuses.UpdateRange(statuses);
+            db.ApiKeyActions.UpdateRange(actions);
             await db.SaveChangesAsync(ct);
         }
     }

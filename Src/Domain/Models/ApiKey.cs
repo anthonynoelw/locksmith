@@ -42,11 +42,6 @@ public class ApiKey : IAppendOnlyTable
     public required DateTime ExpiresAt { get; init; } = DateTime.UtcNow.AddDays(30);
 
     /// <summary>
-    /// Gets or sets the date and time the API key was soft-deleted.
-    /// </summary>
-    public DateTime? DeletedAt { get; set; }
-
-    /// <summary>
     /// Gets or sets the statuses of the API key.
     /// </summary>
     /// <remarks>

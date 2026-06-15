@@ -5,9 +5,13 @@ using Asp.Versioning;
 using Api.Exceptions;
 using Api.OpenApi;
 using Api.Settings;
+using Application.Interfaces.Services;
+using Application.Services;
+using Application.Settings;
 using Domain;
 using Infrastructure.Data;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 /// <summary>
 /// Extension methods for registering application services on <see cref="IHostApplicationBuilder"/>.
@@ -60,6 +64,16 @@ internal static class ServiceExtensions
             .BindConfiguration(WellKnown.ConfigSections.API)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        builder.Services
+            .AddOptions<CryptoSettings>()
+            .BindConfiguration(WellKnown.ConfigSections.CRYPTOGRAPHY)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<CryptoSettings>>().Value);
+        builder.Services.AddScoped<ICryptoService, CryptoService>();
+        builder.Services.AddScoped<ICreateApiKeyService, CreateApiKeyService>();
 
         return builder;
     }

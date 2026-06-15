@@ -27,11 +27,11 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Cryptography
 
-- [ ] Key generation — cryptographically random secret (e.g., `RandomNumberGenerator.GetBytes`)
-- [ ] Key hashing — hash with per-key salt using PBKDF2 or Argon2; store hash + salt; never store raw
-- [ ] Key encryption at rest — encrypt raw key with AES-GCM using a data encryption key (DEK); store ciphertext + nonce in `EncryptedKey`
+- [ ] Key generation — cryptographically random secret for both idempotency key and API key (e.g., `RandomNumberGenerator.GetBytes`)
+- [ ] Idempotency key hashing — hash idempotency key with per-key salt using PBKDF2 or Argon2; store hash + salt; never store raw idempotency key
+- [ ] API key encryption at rest — encrypt raw API key with AES-GCM using a data encryption key (DEK); store ciphertext + nonce in `EncryptedKey`
 - [ ] DEK management — load DEK from environment variable / secrets manager; fail fast on startup if absent
-- [ ] Constant-time key comparison — use `FixedTimeEquals` when validating a presented key against the stored hash
+- [ ] Key retrieval via idempotency key — hash presented idempotency key, compare to stored hash using `FixedTimeEquals`, then decrypt and return raw API key if match succeeds
 
 ### Data Access
 
@@ -47,7 +47,7 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Application Layer 
 
-- [ ] `CreateApiKey` service — generate key, hash, encrypt, persist, return raw key once
+- [x] `CreateApiKey` service — generate key, hash, encrypt, persist, return raw key once
 - [ ] `GetApiKey` service — return metadata (no raw key)
 - [ ] `GetApiKeySecret` service — decrypt and return raw key
 - [ ] `PatchApiKeyStatus` service — validate transition, append status row
@@ -62,8 +62,6 @@ Core functionality and security-critical items required before Locksmith can be 
 ### Idempotency
 
 - [ ] `IdempotencyKey` header extraction middleware or filter — read `Idempotency-Key` from request
-- [ ] Store idempotency key + cached response on first execution of `CreateApiKeyCommand`
-- [ ] Return cached response (original `201` body) on duplicate key without re-executing
 
 ### API Endpoints — Key Management
 

@@ -163,7 +163,7 @@ This prevents silent failures where a key is created but the response is lost, l
 
 ### Unique constraints
 
-- `api_keys.idempotency_key` — one key per unique idempotency value (prevents duplicate creates)
+- `api_keys.idempotency_key_hash` — one key per unique idempotency value (prevents duplicate creates)
 - `api_key_actions(api_key_id, action)` — a key cannot be granted the same action twice
 
 ### Foreign keys

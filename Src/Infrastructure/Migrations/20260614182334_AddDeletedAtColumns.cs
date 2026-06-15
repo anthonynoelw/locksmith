@@ -19,16 +19,9 @@ public partial class AddDeletedAtColumns : Migration
 
         migrationBuilder.AddColumn<DateTime>(
             name: "DeletedAt",
-            table: "ApiKeys",
+            table: "ApiKeyActions",
             type: "timestamp with time zone",
             nullable: true);
-
-        migrationBuilder.AddColumn<string>(
-            name: "DeletedAt",
-            table: "ApiKeyActions",
-            type: "text",
-            nullable: false,
-            defaultValue: string.Empty);
     }
 
     /// <inheritdoc />
@@ -37,10 +30,6 @@ public partial class AddDeletedAtColumns : Migration
         migrationBuilder.DropColumn(
             name: "DeletedAt",
             table: "ApiKeyStatuses");
-
-        migrationBuilder.DropColumn(
-            name: "DeletedAt",
-            table: "ApiKeys");
 
         migrationBuilder.DropColumn(
             name: "DeletedAt",

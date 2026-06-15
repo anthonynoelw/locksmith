@@ -46,6 +46,7 @@ public sealed class UnitOfWork(AppDbContext dbContext) : IUnitOfWork
     /// <summary>
     /// Disposes the unit of work and its associated database context.
     /// </summary>
+    /// <returns>A Value Task.</returns>
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
