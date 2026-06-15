@@ -16,12 +16,12 @@ public interface IApiKeyRepository
     public Task<ApiKey?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
-    /// Gets an API Key by its idempotency key hash.
+    /// Gets an API Key by its secret hash.
     /// </summary>
-    /// <param name="idempotencyKeyHash">The idempotency key hash.</param>
+    /// <param name="secretHash">The SHA-256 hash of the plaintext API key secret.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The API Key if found; otherwise null.</returns>
-    public Task<ApiKey?> GetByIdempotencyKeyHashAsync(string idempotencyKeyHash, CancellationToken ct = default);
+    public Task<ApiKey?> GetBySecretHashAsync(string secretHash, CancellationToken ct = default);
 
     /// <summary>
     /// Gets all API Keys.

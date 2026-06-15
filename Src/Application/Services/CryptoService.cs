@@ -14,6 +14,7 @@ using Konscious.Security.Cryptography;
 public sealed class CryptoService : ICryptoService
 {
     private const int IDEMPOTENCY_KEY_BYTES = 96;
+    private const int API_KEY_SECRET_BYTES = 32;
     private const int NONCE_SIZE = 12;
     private const int TAG_SIZE = 16;
     private const int DERIVED_KEY_SIZE = 32;
@@ -35,9 +36,16 @@ public sealed class CryptoService : ICryptoService
     }
 
     /// <inheritdoc/>
-    public string HashForLookup(string idempotencyKey)
+    public string GenerateApiKeySecret()
     {
-        byte[] inputBytes = Encoding.UTF8.GetBytes(idempotencyKey);
+        byte[] bytes = RandomNumberGenerator.GetBytes(API_KEY_SECRET_BYTES);
+        return $"lk_{Base64UrlEncode(bytes)}";
+    }
+
+    /// <inheritdoc/>
+    public string HashForLookup(string secret)
+    {
+        byte[] inputBytes = Encoding.UTF8.GetBytes(secret);
         byte[] hashBytes = SHA256.HashData(inputBytes);
         return Convert.ToBase64String(hashBytes);
     }

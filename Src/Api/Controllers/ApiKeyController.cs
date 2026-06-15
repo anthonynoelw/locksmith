@@ -34,7 +34,6 @@ public sealed class ApiKeyController : Controller
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>201 Created with the new key ID, plaintext secret, and idempotency key.</returns>
     [HttpPost]
-    [Authorize]
     public async Task<IActionResult> Create(
         [FromBody] CreateApiKeyRequest request,
         CancellationToken cancellationToken)

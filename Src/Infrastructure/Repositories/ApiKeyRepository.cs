@@ -24,19 +24,19 @@ public sealed class ApiKeyRepository(AppDbContext db) : IApiKeyRepository
             .FirstOrDefaultAsync(k => k.Id == id, ct);
 
     /// <summary>
-    /// Gets an API Key by its idempotency key hash.
+    /// Gets an API Key by its secret hash.
     /// </summary>
-    /// <param name="idempotencyKeyHash">The idempotency key hash.</param>
+    /// <param name="secretHash">The SHA-256 hash of the plaintext API key secret.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The API Key if found; otherwise null.</returns>
-    public async Task<ApiKey?> GetByIdempotencyKeyHashAsync(
-        string idempotencyKeyHash,
+    public async Task<ApiKey?> GetBySecretHashAsync(
+        string secretHash,
         CancellationToken ct = default) =>
         await db.ApiKeys
             .Include(k => k.Statuses)
             .Include(k => k.Actions)
             .AsNoTracking()
-            .FirstOrDefaultAsync(k => k.IdempotencyKeyHash == idempotencyKeyHash, ct);
+            .FirstOrDefaultAsync(k => k.SecretHash == secretHash, ct);
 
     /// <summary>
     /// Gets all API Keys.

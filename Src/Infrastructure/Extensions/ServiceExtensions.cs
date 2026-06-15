@@ -40,6 +40,7 @@ public static class ServiceExtensions
         services.AddScoped<IApiKeyRepository>(sp => new ApiKeyRepository(sp.GetRequiredService<AppDbContext>()));
         services.AddScoped<IApiKeyStatusRepository>(sp => new ApiKeyStatusRepository(sp.GetRequiredService<AppDbContext>()));
         services.AddScoped<IApiKeyActionRepository>(sp => new ApiKeyActionRepository(sp.GetRequiredService<AppDbContext>()));
+        services.AddScoped<IIdempotencyKeyRepository>(sp => new IdempotencyKeyRepository(sp.GetRequiredService<AppDbContext>()));
 
         string redisConnectionString = configuration.GetConnectionString(WellKnown.ConnectionStringKeys.REDIS)
             ?? throw new InvalidOperationException("Connection string 'Redis' not found.");

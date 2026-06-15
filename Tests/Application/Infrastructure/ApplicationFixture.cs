@@ -66,7 +66,7 @@ public sealed class ApplicationFixture : IAsyncLifetime
                         { "ConnectionStrings:Redis", "localhost:6379,abortConnect=false" },
                         { "Cryptography:DegreeOfParallelism", "1" },
                         { "Cryptography:MemorySize", "65536" },
-                        { "Cryptography:Iterations", "3" },
+                        { "Cryptography:Iterations", "8" },
                     };
                     config.AddInMemoryCollection(testSettings);
                 });

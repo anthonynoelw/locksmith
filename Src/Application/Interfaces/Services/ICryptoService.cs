@@ -18,6 +18,12 @@ public interface ICryptoService
     public string GenerateIdempotencyKey();
 
     /// <summary>
+    /// Generates a unique, random API key secret.
+    /// </summary>
+    /// <returns>A cryptographically secure random string suitable for use as an API key secret.</returns>
+    public string GenerateApiKeySecret();
+
+    /// <summary>
     /// Creates a cryptographic hash of an idempotency key for secure database lookup.
     /// </summary>
     /// <remarks>
@@ -25,9 +31,9 @@ public interface ICryptoService
     /// to prevent exposure in case of database compromise. The plaintext key is returned
     /// to the client and never stored.
     /// </remarks>
-    /// <param name="idempotencyKey">The plaintext idempotency key to hash.</param>
+    /// <param name="secret">The plaintext idempotency key to hash.</param>
     /// <returns>A deterministic hash suitable for database indexing and lookups.</returns>
-    public string HashForLookup(string idempotencyKey);
+    public string HashForLookup(string secret);
 
     /// <summary>
     /// Derives a cryptographic key suitable for encryption from an idempotency key and salt.

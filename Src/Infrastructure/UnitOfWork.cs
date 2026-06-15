@@ -16,6 +16,7 @@ public sealed class UnitOfWork(AppDbContext dbContext) : IUnitOfWork
     private IApiKeyRepository? _apiKeyRepository;
     private IApiKeyStatusRepository? _apiKeyStatusRepository;
     private IApiKeyActionRepository? _apiKeyActionRepository;
+    private IIdempotencyKeyRepository? _idempotencyKeyRepository;
     private bool _disposed;
 
     /// <summary>
@@ -32,6 +33,11 @@ public sealed class UnitOfWork(AppDbContext dbContext) : IUnitOfWork
     /// Gets the repository for API Key action permission operations.
     /// </summary>
     public IApiKeyActionRepository ApiKeyActions => _apiKeyActionRepository ??= new ApiKeyActionRepository(dbContext);
+
+    /// <summary>
+    /// Gets the repository for idempotency key operations.
+    /// </summary>
+    public IIdempotencyKeyRepository IdempotencyKeys => _idempotencyKeyRepository ??= new IdempotencyKeyRepository(dbContext);
 
     /// <summary>
     /// Saves all pending changes to the database within the current transaction.

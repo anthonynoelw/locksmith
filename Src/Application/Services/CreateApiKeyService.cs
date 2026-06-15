@@ -37,12 +37,13 @@ public sealed class CreateApiKeyService : ICreateApiKeyService
         }
 
         string idempotencyKey = _cryptoService.GenerateIdempotencyKey();
-        string lookupHash = _cryptoService.HashForLookup(idempotencyKey);
+        string idempotencyKeyHash = _cryptoService.HashForLookup(idempotencyKey);
 
         byte[] salt = RandomNumberGenerator.GetBytes(32);
         byte[] encKey = _cryptoService.DeriveEncryptionKey(idempotencyKey, salt);
 
-        string plainSecret = GenerateApiKeySecret();
+        string plainSecret = _cryptoService.GenerateApiKeySecret();
+        string secretHash = _cryptoService.HashForLookup(plainSecret);
         string ciphertext = _cryptoService.Encrypt(plainSecret, encKey);
 
         DateTime now = DateTime.UtcNow;
@@ -50,9 +51,8 @@ public sealed class CreateApiKeyService : ICreateApiKeyService
         var apiKey = new ApiKey
         {
             Id = Guid.NewGuid(),
-            IdempotencyKeyHash = lookupHash,
             Secret = ciphertext,
-            Salt = Convert.ToBase64String(salt),
+            SecretHash = secretHash,
             CreatedBy = command.CreatedBy,
             CreatedAt = now,
             ExpiresAt = command.ExpiresAt ?? now.AddDays(30),
@@ -61,6 +61,19 @@ public sealed class CreateApiKeyService : ICreateApiKeyService
         };
 
         await _unitOfWork.ApiKeys.AddAsync(apiKey, cancellationToken);
+
+        var idempotencyKey_entity = new IdempotencyKey
+        {
+            Id = Guid.NewGuid(),
+            ApiKeyId = apiKey.Id,
+            IdempotencyKeyHash = idempotencyKeyHash,
+            Salt = Convert.ToBase64String(salt),
+            CreatedBy = command.CreatedBy,
+            CreatedAt = now,
+            ApiKey = apiKey,
+        };
+
+        await _unitOfWork.IdempotencyKeys.AddAsync(idempotencyKey_entity, cancellationToken);
 
         await _unitOfWork.ApiKeyStatuses.AddAsync(
             new ApiKeyStatus
@@ -94,14 +107,5 @@ public sealed class CreateApiKeyService : ICreateApiKeyService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CreateApiKeyResult(apiKey.Id, plainSecret, idempotencyKey);
-    }
-
-    private static string GenerateApiKeySecret()
-    {
-        byte[] bytes = RandomNumberGenerator.GetBytes(32);
-        return "lk_" + Convert.ToBase64String(bytes)
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
     }
 }

@@ -51,7 +51,7 @@ HMAC-SHA256 hashing at rest and per-key rate limiting enforced at the middleware
 1. Clone and initialize:
    ```bash
    git clone <repo-url>
-   cd dotnet-project-template
+   cd locksmith
    ./setup.sh  # or setup.bat on Windows
    ```
 

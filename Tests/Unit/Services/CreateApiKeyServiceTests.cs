@@ -17,6 +17,7 @@ public sealed class CreateApiKeyServiceTests
     private readonly Mock<IApiKeyRepository> _apiKeyRepo;
     private readonly Mock<IApiKeyStatusRepository> _statusRepo;
     private readonly Mock<IApiKeyActionRepository> _actionRepo;
+    private readonly Mock<IIdempotencyKeyRepository> _idempotencyKeyRepo;
     private readonly Mock<ICryptoService> _cryptoService;
     private readonly CreateApiKeyService _sut;
 
@@ -25,15 +26,18 @@ public sealed class CreateApiKeyServiceTests
         _apiKeyRepo = new Mock<IApiKeyRepository>();
         _statusRepo = new Mock<IApiKeyStatusRepository>();
         _actionRepo = new Mock<IApiKeyActionRepository>();
+        _idempotencyKeyRepo = new Mock<IIdempotencyKeyRepository>();
 
         _unitOfWork = new Mock<IUnitOfWork>();
         _unitOfWork.Setup(u => u.ApiKeys).Returns(_apiKeyRepo.Object);
         _unitOfWork.Setup(u => u.ApiKeyStatuses).Returns(_statusRepo.Object);
         _unitOfWork.Setup(u => u.ApiKeyActions).Returns(_actionRepo.Object);
+        _unitOfWork.Setup(u => u.IdempotencyKeys).Returns(_idempotencyKeyRepo.Object);
         _unitOfWork.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         _cryptoService = new Mock<ICryptoService>();
         _cryptoService.Setup(c => c.GenerateIdempotencyKey()).Returns("test-idempotency-key");
+        _cryptoService.Setup(c => c.GenerateApiKeySecret()).Returns("lk_test-secret");
         _cryptoService.Setup(c => c.HashForLookup(It.IsAny<string>())).Returns("test-hash");
         _cryptoService.Setup(c => c.DeriveEncryptionKey(It.IsAny<string>(), It.IsAny<byte[]>())).Returns(new byte[32]);
         _cryptoService.Setup(c => c.Encrypt(It.IsAny<string>(), It.IsAny<byte[]>())).Returns("encrypted");
@@ -69,6 +73,44 @@ public sealed class CreateApiKeyServiceTests
         CreateApiKeyResult result = await _sut.Execute(command);
 
         result.PlaintextSecret.Should().StartWith("lk_");
+    }
+
+    [Fact]
+    public async Task Execute_CallsGenerateApiKeySecret()
+    {
+        CreateApiKeyCommand command = new CreateApiKeyCommand("caller", null, new List<ApiKeyActionEnum>());
+
+        await _sut.Execute(command);
+
+        _cryptoService.Verify(c => c.GenerateApiKeySecret(), Times.Once);
+    }
+
+    [Fact]
+    public async Task Execute_SetsSecretHashOnApiKey()
+    {
+        CreateApiKeyCommand command = new CreateApiKeyCommand("caller", null, new List<ApiKeyActionEnum>());
+        ApiKey? captured = null;
+        _apiKeyRepo
+            .Setup(r => r.AddAsync(It.IsAny<ApiKey>(), It.IsAny<CancellationToken>()))
+            .Callback<ApiKey, CancellationToken>((key, _) => captured = key);
+
+        await _sut.Execute(command);
+
+        captured!.SecretHash.Should().Be("test-hash");
+    }
+
+    [Fact]
+    public async Task Execute_AddsIdempotencyKeyToRepository()
+    {
+        CreateApiKeyCommand command = new CreateApiKeyCommand("caller", null, new List<ApiKeyActionEnum>());
+
+        await _sut.Execute(command);
+
+        _idempotencyKeyRepo.Verify(
+            r => r.AddAsync(
+                It.Is<IdempotencyKey>(k => k.IdempotencyKeyHash == "test-hash"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

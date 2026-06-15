@@ -27,6 +27,11 @@ public interface IUnitOfWork : IAsyncDisposable
     public IApiKeyActionRepository ApiKeyActions { get; }
 
     /// <summary>
+    /// Gets the repository for idempotency key operations.
+    /// </summary>
+    public IIdempotencyKeyRepository IdempotencyKeys { get; }
+
+    /// <summary>
     /// Saves all pending changes to the database within the current transaction.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>

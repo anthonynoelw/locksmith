@@ -11,20 +11,15 @@ public class ApiKey : IAppendOnlyTable
     public required Guid Id { get; init; } = Guid.NewGuid();
 
     /// <summary>
-    /// Gets the idempotency key for the API key.
-    /// </summary>
-    public required string IdempotencyKeyHash { get; init; }
-
-    /// <summary>
     /// Gets the encrypted ciphertext of the API key secret.
     /// Decrypted using a key derived from <see cref="IdempotencyKey"/> and <see cref="Salt"/>.
     /// </summary>
     public required string Secret { get; init; }
 
     /// <summary>
-    /// Gets the salt used to derive the decryption key for <see cref="Secret"/>.
+    /// Gets the API key hash.
     /// </summary>
-    public required string Salt { get; init; }
+    public required string SecretHash { get; init; }
 
     /// <summary>
     /// Gets the date and time the API key was created.

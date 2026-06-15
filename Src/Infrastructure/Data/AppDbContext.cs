@@ -35,6 +35,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, string? databa
     public DbSet<ApiKeyAction> ApiKeyActions { get; set; }
 
     /// <summary>
+    /// Gets or sets the idempotency keys.
+    /// </summary>
+    public DbSet<IdempotencyKey> IdempotencyKeys { get; set; }
+
+    /// <summary>
     /// Validates that append-only entities are not being modified or deleted.
     /// </summary>
     /// <returns>The number of state entries written to the database.</returns>
@@ -74,6 +79,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, string? databa
             .HasForeignKey(e => e.ApiKeyId);
 
         modelBuilder.Entity<ApiKey>()
+            .HasIndex(e => e.SecretHash)
+            .IsUnique();
+
+        modelBuilder.Entity<IdempotencyKey>()
+            .HasOne(e => e.ApiKey)
+            .WithMany()
+            .HasForeignKey(e => e.ApiKeyId);
+
+        modelBuilder.Entity<IdempotencyKey>()
             .HasIndex(e => e.IdempotencyKeyHash)
             .IsUnique();
 
