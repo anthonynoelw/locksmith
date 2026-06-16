@@ -15,7 +15,7 @@ dotnet test
 # Run a specific test project
 dotnet test Tests/Unit/Unit.csproj
 dotnet test Tests/Integration/Integration.csproj
-dotnet test Tests/Application/Application.csproj
+dotnet test Tests/Application/Tests.Application.csproj
 
 # Run a single test by name
 dotnet test Tests/Unit/Unit.csproj --filter "FullyQualifiedName~GlobalExceptionHandlerTests"

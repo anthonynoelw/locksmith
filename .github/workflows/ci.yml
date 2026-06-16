@@ -50,7 +50,7 @@ jobs:
         run: dotnet test Tests/Integration/Integration.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx"
 
       - name: Run application tests
-        run: dotnet test Tests/Application/Application.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=application-tests.trx"
+        run: dotnet test Tests/Application/Tests.Application.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=application-tests.trx"
 
       - name: Publish API
         run: dotnet publish Src/Api/Api.csproj --no-build --configuration Release --output ./publish/api
