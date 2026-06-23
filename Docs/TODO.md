@@ -10,7 +10,7 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Authentication
 
-- [ ] Static bearer token middleware — extract from `Authorization: Bearer <token>` header, validate against `ApiSettings.BearerToken` using `FixedTimeEquals` (constant-time); return `401` on missing/invalid; runs before auth handler
+- [x] Static bearer token middleware — extract from `Authorization: Bearer <token>` header, validate against `ApiSettings.BearerToken` using `FixedTimeEquals` (constant-time); return `401` on missing/invalid; runs before auth handler
 - [ ] `[Authorize]` attribute on all management endpoints to enforce middleware result
 - [x] Inject token via environment variable / config; validate with `[Required]` on `ApiSettings` at startup
 - [x] Exempt `/health` and `/health/ready` from authentication (not under `/api/v{version}/`)

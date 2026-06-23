@@ -45,4 +45,13 @@ public static class WellKnown
         /// <summary>Marks a check as a readiness dependency. Runs under <c>GET /health/ready</c>.</summary>
         public const string READY = "READY";
     }
+
+    /// <summary>
+    /// Authentication scheme names. Use these when registering and referencing authentication handlers.
+    /// </summary>
+    public static class AuthenticationSchemes
+    {
+        /// <summary>Bearer token authentication scheme for static pre-shared token validation.</summary>
+        public const string BEARER = "Bearer";
+    }
 }

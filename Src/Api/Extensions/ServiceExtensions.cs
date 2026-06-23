@@ -2,6 +2,7 @@ namespace Api.Extensions;
 
 using Asp.Versioning;
 
+using Api.Authentication;
 using Api.Exceptions;
 using Api.OpenApi;
 using Api.Settings;
@@ -27,6 +28,12 @@ internal static class ServiceExtensions
     internal static IHostApplicationBuilder AddApiServices(this IHostApplicationBuilder builder)
     {
         builder.Services.AddControllers();
+
+        builder.Services
+            .AddAuthentication(WellKnown.AuthenticationSchemes.BEARER)
+            .AddScheme<BearerTokenAuthenticationOptions, BearerTokenAuthenticationHandler>(
+                WellKnown.AuthenticationSchemes.BEARER,
+                _ => { });
 
         builder.Services
             .AddApiVersioning(options =>

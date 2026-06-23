@@ -22,7 +22,13 @@ public sealed class CreateApiKeyEndpointTests(ApplicationFixture fixture) : Appl
         object request = new { actions = new[] { 0, 1 } }; // Read=0, Write=1
         StringContent content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), System.Text.Encoding.UTF8, "application/json");
 
-        HttpResponseMessage response = await Client.PostAsync("/api/v1/api-keys", content);
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        {
+            Content = content,
+        };
+        requestMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
+
+        HttpResponseMessage response = await Client.SendAsync(requestMessage);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
@@ -33,7 +39,13 @@ public sealed class CreateApiKeyEndpointTests(ApplicationFixture fixture) : Appl
         object request = new { actions = new[] { 0 } }; // Read only
         StringContent content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), System.Text.Encoding.UTF8, "application/json");
 
-        HttpResponseMessage response = await Client.PostAsync("/api/v1/api-keys", content);
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        {
+            Content = content,
+        };
+        requestMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
+
+        HttpResponseMessage response = await Client.SendAsync(requestMessage);
         string jsonBody = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);

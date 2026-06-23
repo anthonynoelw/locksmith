@@ -79,7 +79,9 @@ services:
     image: redis:${REDIS-VERSION}-alpine
     container_name: locksmith-redis
     ports:
-      - "{REDIS_HOST_PORT}:${POSTGRES_CONTAINER_PORT}"
+      - "${REDIS_HOST_PORT}:${REDIS_CONTAINER_PORT}"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -88,3 +90,12 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+    # Docker-managed volume (persists on host automatically)
+    # Data stored at: /var/lib/docker/volumes/locksmith_postgres_data/_data (Linux)
+    #                 ~/Library/Containers/com.docker.docker/volumes/locksmith_postgres_data/_data (macOS)
+    #                 \\wsl$\docker-desktop-data\mnt\wsl\docker-desktop\volumes\locksmith_postgres_data\_data (Windows)
+
+  redis_data:
+    driver: local
+    # Docker-managed volume (persists on host automatically)

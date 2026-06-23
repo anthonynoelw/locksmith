@@ -207,10 +207,8 @@ dotnet build
 dotnet test
 ```
 
-## Roadmap (Docs/TODO.md highlights)
+## Roadmap (Docs/TODO.md)
 
 Key items not yet implemented that new features will likely need:
-- EF Core DbContext + migrations
-- Repository pattern (`IRepository<T>`, `IUnitOfWork`)
 - OpenTelemetry traces + metrics
 - OpenApi 
