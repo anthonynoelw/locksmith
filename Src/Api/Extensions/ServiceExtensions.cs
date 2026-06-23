@@ -11,6 +11,8 @@ using Application.Services;
 using Application.Settings;
 using Domain;
 using Infrastructure.Data;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
@@ -57,6 +59,20 @@ internal static class ServiceExtensions
             options.AddDocumentTransformer<ApiVersionDocumentTransformer>());
 
         builder.Services.AddProblemDetails();
+        builder.Services.Configure<ApiBehaviorOptions>(options =>
+        {
+            options.InvalidModelStateResponseFactory = context =>
+            {
+                var problemDetails = new ValidationProblemDetails(context.ModelState)
+                {
+                    Status = StatusCodes.Status422UnprocessableEntity,
+                    Title = "Unprocessable Entity",
+                    Type = "https://tools.ietf.org/html/rfc9110#section-15.5.21",
+                    Instance = context.HttpContext.Request.Path,
+                };
+                return new UnprocessableEntityObjectResult(problemDetails);
+            };
+        });
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
         string redisConnectionString = builder.Configuration.GetConnectionString(WellKnown.ConnectionStringKeys.REDIS)
@@ -81,6 +97,10 @@ internal static class ServiceExtensions
         builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<CryptoSettings>>().Value);
         builder.Services.AddScoped<ICryptoService, CryptoService>();
         builder.Services.AddScoped<ICreateApiKeyService, CreateApiKeyService>();
+        builder.Services.AddScoped<IListApiKeysService, ListApiKeysService>();
+        builder.Services.AddScoped<IGetApiKeyByIdService, GetApiKeyByIdService>();
+        builder.Services.AddScoped<IValidateApiKeySecretService, ValidateApiKeySecretService>();
+        builder.Services.AddScoped<IRetrieveSecretService, RetrieveSecretService>();
 
         return builder;
     }

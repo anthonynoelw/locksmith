@@ -5,6 +5,8 @@ using Api.Responses;
 using Api.Settings;
 using Application.Commands;
 using Application.Interfaces.Services;
+using Domain.Enums;
+using Domain.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -14,14 +16,32 @@ using Microsoft.Extensions.Options;
 public sealed class ApiKeyController : Controller
 {
     private readonly ICreateApiKeyService _createApiKeyService;
+    private readonly IListApiKeysService _listApiKeysService;
+    private readonly IGetApiKeyByIdService _getApiKeyByIdService;
+    private readonly IValidateApiKeySecretService _validateApiKeySecretService;
+    private readonly IRetrieveSecretService _retrieveSecretService;
     private readonly ApiSettings _apiSettings;
 
     /// <summary>Initializes a new instance of the <see cref="ApiKeyController"/> class.</summary>
     /// <param name="createApiKeyService">Service that creates new API keys.</param>
+    /// <param name="listApiKeysService">Service that lists API keys with pagination.</param>
+    /// <param name="getApiKeyByIdService">Service that retrieves an API key by its ID.</param>
+    /// <param name="validateApiKeySecretService">Service that validates an API key secret.</param>
+    /// <param name="retrieveSecretService">Service that retrieves and decrypts an API key secret.</param>
     /// <param name="apiSettings">API-level settings providing the caller identity.</param>
-    public ApiKeyController(ICreateApiKeyService createApiKeyService, IOptions<ApiSettings> apiSettings)
+    public ApiKeyController(
+        ICreateApiKeyService createApiKeyService,
+        IListApiKeysService listApiKeysService,
+        IGetApiKeyByIdService getApiKeyByIdService,
+        IValidateApiKeySecretService validateApiKeySecretService,
+        IRetrieveSecretService retrieveSecretService,
+        IOptions<ApiSettings> apiSettings)
     {
         _createApiKeyService = createApiKeyService;
+        _listApiKeysService = listApiKeysService;
+        _getApiKeyByIdService = getApiKeyByIdService;
+        _validateApiKeySecretService = validateApiKeySecretService;
+        _retrieveSecretService = retrieveSecretService;
         _apiSettings = apiSettings.Value;
     }
 
@@ -52,5 +72,107 @@ public sealed class ApiKeyController : Controller
         return Created(
             $"/api/v1/api-keys/{result.ApiKeyId}",
             new CreateApiKeyResponse(result.ApiKeyId, result.PlaintextSecret, result.IdempotencyKey));
+    }
+
+    /// <summary>Lists all API keys with pagination.</summary>
+    /// <param name="limit">Maximum number of keys to return (default 50, max 1000).</param>
+    /// <param name="offset">Number of keys to skip (default 0).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with paginated list of API key metadata.</returns>
+    [HttpGet]
+    [Authorize]
+    public async Task<IActionResult> List(
+        [FromQuery] int limit = 50,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ListApiKeysResult result = await _listApiKeysService.Execute(limit, offset, cancellationToken);
+
+        var items = result.Keys.Select(MapToMetadataResponse).ToList();
+
+        return Ok(new ListApiKeysResponse(items, result.Total, result.Limit, result.Offset));
+    }
+
+    /// <summary>Gets an API key by its ID.</summary>
+    /// <param name="id">The API key identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with the key metadata, or 404 Not Found.</returns>
+    [HttpGet("{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> GetById(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken)
+    {
+        ApiKey apiKey = await _getApiKeyByIdService.Execute(id, cancellationToken);
+
+        return Ok(MapToMetadataResponse(apiKey));
+    }
+
+    /// <summary>Validates an API key secret and returns its current status.</summary>
+    /// <param name="request">The secret to validate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with validation result and current status, or 404 Not Found if secret is invalid.</returns>
+    [HttpPost("validate")]
+    [Authorize]
+    public async Task<IActionResult> Validate(
+        [FromBody] ValidateApiKeySecretRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidateApiKeySecretResult result = await _validateApiKeySecretService.Execute(
+            request.Secret,
+            cancellationToken);
+
+        return Ok(new ValidateApiKeySecretResponse(result.ApiKeyId, result.IsValid, result.Status));
+    }
+
+    /// <summary>Retrieves and decrypts an API key secret using its idempotency key.</summary>
+    /// <param name="request">The idempotency key for decryption.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with the decrypted secret, or 404 Not Found if idempotency key is invalid.</returns>
+    [HttpPost("retrieve-secret")]
+    [Authorize]
+    public async Task<IActionResult> RetrieveSecret(
+        [FromBody] RetrieveSecretRequest request,
+        CancellationToken cancellationToken)
+    {
+        RetrieveSecretResult result = await _retrieveSecretService.Execute(
+            request.IdempotencyKey,
+            cancellationToken);
+
+        return Ok(new RetrieveSecretResponse(result.ApiKeyId, result.Secret));
+    }
+
+    private static ApiKeyMetadataResponse MapToMetadataResponse(ApiKey apiKey)
+    {
+        var currentStatus = apiKey.Statuses
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefault();
+
+        var statusString = currentStatus?.Status.ToString() ?? ApiKeyStatusEnum.Inactive.ToString();
+        var actionStrings = apiKey.Actions
+            .Where(a => a.DeletedAt == null)
+            .Select(a => a.Action.ToString())
+            .ToList();
+
+        string maskedHash = MaskSecretHash(apiKey.SecretHash);
+
+        return new ApiKeyMetadataResponse(
+            apiKey.Id,
+            maskedHash,
+            apiKey.CreatedAt,
+            apiKey.CreatedBy,
+            apiKey.ExpiresAt,
+            statusString,
+            actionStrings);
+    }
+
+    private static string MaskSecretHash(string secretHash)
+    {
+        if (secretHash.Length <= 4)
+        {
+            return "****";
+        }
+
+        return $"****...{secretHash[^4..]}";
     }
 }

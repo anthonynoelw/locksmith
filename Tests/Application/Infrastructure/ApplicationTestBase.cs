@@ -8,7 +8,7 @@ namespace Application.Infrastructure;
 public abstract class ApplicationTestBase
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ApplicationTestBase"/>.
+    /// Initializes a new instance of the <see cref="ApplicationTestBase"/> class.
     /// </summary>
     /// <param name="fixture">The application fixture.</param>
     protected ApplicationTestBase(ApplicationFixture fixture)

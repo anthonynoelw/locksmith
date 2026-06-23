@@ -51,6 +51,32 @@ public sealed class ApiKeyRepository(AppDbContext db) : IApiKeyRepository
             .ToListAsync(ct);
 
     /// <summary>
+    /// Gets a page of API Keys with pagination.
+    /// </summary>
+    /// <param name="offset">Number of API Keys to skip.</param>
+    /// <param name="limit">Maximum number of API Keys to return.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A tuple containing the paginated API Keys and the total count of all API Keys.</returns>
+    public async Task<(IReadOnlyList<ApiKey> Keys, int TotalCount)> GetPageAsync(
+        int offset,
+        int limit,
+        CancellationToken ct = default)
+    {
+        IQueryable<ApiKey> query = db.ApiKeys
+            .Include(k => k.Statuses)
+            .Include(k => k.Actions)
+            .AsNoTracking();
+
+        int totalCount = await query.CountAsync(ct);
+        IReadOnlyList<ApiKey> keys = await query
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return (keys, totalCount);
+    }
+
+    /// <summary>
     /// Adds a new API Key to the repository.
     /// </summary>
     /// <param name="apiKey">The API Key to add.</param>

@@ -62,6 +62,13 @@ public sealed class GlobalExceptionHandler(
                 conflict.Message,
                 httpContext),
 
+            DecryptionFailedException decryption => BuildProblemDetails(
+                StatusCodes.Status422UnprocessableEntity,
+                "Unprocessable Entity",
+                "https://tools.ietf.org/html/rfc9110#section-15.5.21",
+                decryption.Message,
+                httpContext),
+
             _ => BuildProblemDetails(
                 StatusCodes.Status500InternalServerError,
                 "Internal Server Error",

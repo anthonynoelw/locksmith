@@ -31,6 +31,15 @@ public interface IApiKeyRepository
     public Task<IReadOnlyList<ApiKey>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Gets a page of API Keys with pagination.
+    /// </summary>
+    /// <param name="offset">Number of API Keys to skip.</param>
+    /// <param name="limit">Maximum number of API Keys to return.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A tuple containing the paginated API Keys and the total count of all API Keys.</returns>
+    public Task<(IReadOnlyList<ApiKey> Keys, int TotalCount)> GetPageAsync(int offset, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// Adds a new API Key to the repository.
     /// </summary>
     /// <param name="apiKey">The API Key to add.</param>
