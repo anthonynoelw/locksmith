@@ -1,7 +1,7 @@
 services:
   api:
     build:
-      context: ..
+      context: .
       dockerfile: Docker/Dockerfile
       args:
         PROJECT_NAME: Api
@@ -10,11 +10,19 @@ services:
     container_name: locksmith-api
     ports:
       - "${API_HOST_PORT}:${API_CONTAINER_PORT}"
+    env_file:
+      - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=https://+:${API_CONTAINER_PORT}
-    volumes:
-      - ..:/app:cached
+      - ASPNETCORE_URLS=http://+:${API_CONTAINER_PORT}
+    # volumes:
+    #   - .:/app:cached  # Overwrites the compiled DLLs with source; only needed for a dotnet-watch/hot-reload setup
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${API_CONTAINER_PORT}/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -23,17 +31,19 @@ services:
 
   worker:
     build:
-      context: ..
+      context: .
       dockerfile: Docker/Dockerfile
       args:
         PROJECT_NAME: Agent
         PROJECT_PATH: Src/Agent
         DOTNET_VERSION: "10.0"
     container_name: locksmith-worker
+    env_file:
+      - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-    volumes:
-      - ..:/app:cached
+    # volumes:
+    #   - .:/app:cached  # Overwrites the compiled DLLs with source; only needed for a dotnet-watch/hot-reload setup
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,7 +86,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:${REDIS-VERSION}-alpine
+    image: redis:${REDIS_VERSION}-alpine
     container_name: locksmith-redis
     ports:
       - "${REDIS_HOST_PORT}:${REDIS_CONTAINER_PORT}"

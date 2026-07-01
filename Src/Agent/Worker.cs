@@ -12,6 +12,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     /// <returns>A task that represents the asynchronous operation.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        logger.LogInformation("Worker starting at: {time}", DateTimeOffset.Now);
+        return;
         while (!stoppingToken.IsCancellationRequested)
         {
             if (logger.IsEnabled(LogLevel.Information))
