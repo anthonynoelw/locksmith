@@ -65,15 +65,12 @@ The caller should see a response that indicates the success or failure of the op
 
 ## What the implementation revealed
 
-[What did you discover while actually writing the code? Did anything surprise
-you? Did your initial answer hold up?]
+The implementation revealed that i tried to think of multiple thinks at the same time. I tried to think about the retrieval feature and everything else at the same time. Thats why i initially mixed everything into the api key table and later separated it into two entities. 
 
 ## The security principle this concept illustrates
 
-[State it in one or two sentences, in plain language. Not a quote from a
-textbook — your own words.]
+See ADR-001.
 
 ## What I would do differently
 
-[Is there anything in your implementation you're not fully satisfied with?
-What would you improve if you revisited this?]
+Nothing. I learned that thinking about to many things at the same time can decrease the quality of the one thing which currently matters.

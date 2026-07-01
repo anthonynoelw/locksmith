@@ -69,15 +69,12 @@ classDiagram
 
 ## What the implementation revealed
 
-[What did you discover while actually writing the code? Did anything surprise
-you? Did your initial answer hold up?]
+See Concept-001. I needed to also think about the new Idempotency Entity as an extra concern.
 
 ## The security principle this concept illustrates
 
-[State it in one or two sentences, in plain language. Not a quote from a
-textbook — your own words.]
+Sensitive Data should never be stored as plain text but always encrypted or hashed.
 
 ## What I would do differently
 
-[Is there anything in your implementation you're not fully satisfied with?
-What would you improve if you revisited this?]
+Nothing.

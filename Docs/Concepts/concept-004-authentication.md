@@ -30,15 +30,12 @@ flowchart TD
 
 ## What the implementation revealed
 
-[What did you discover while actually writing the code? Did anything surprise
-you? Did your initial answer hold up?]
+My initial answer is had a slight misconception for the current usage of locksmith. The nature of a bearer token inside locksmith is used for authentication not for authorization. This meant that i had used the both words interchangeably when in reality those are completely different.
 
 ## The security principle this concept illustrates
 
-[State it in one or two sentences, in plain language. Not a quote from a
-textbook — your own words.]
+Authentication is used to prove the identity of the requesting endpoint. Authorization is used to see if the current action is allowed for the current request.
 
 ## What I would do differently
 
-[Is there anything in your implementation you're not fully satisfied with?
-What would you improve if you revisited this?]
+I would look at the difference of specific keywords rather than just assuming that it is the correct thing.
