@@ -38,4 +38,16 @@ public interface IApiKeyStatusRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public Task AddAsync(ApiKeyStatus status, CancellationToken ct = default);
+
+    /// <summary>
+    /// Soft-deletes the current (most recent, non-deleted) status for an API Key.
+    /// </summary>
+    /// <param name="apiKeyId">The API Key identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="Domain.Exceptions.NotFoundException">Thrown when no current status exists for the given <paramref name="apiKeyId"/>.</exception>
+    /// <exception cref="Domain.Exceptions.ConflictException">Thrown when the current status is <see cref="Domain.Enums.ApiKeyStatusEnum.Revoked"/> or <see cref="Domain.Enums.ApiKeyStatusEnum.Expired"/> and therefore cannot be changed.</exception>
+    public Task SoftDeleteAsync(
+        Guid apiKeyId,
+        CancellationToken ct = default);
 }
