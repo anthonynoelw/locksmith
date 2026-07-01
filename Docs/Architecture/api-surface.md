@@ -1,17 +1,17 @@
 # Locksmith — API Surface
 
-Locksmith is a REST API for managing the full lifecycle of API keys: issuance, activation, rotation, and revocation. It is called by a single trusted internal service that uses the keys it receives to authenticate its own downstream consumers. This document covers every endpoint: the request shape, all possible responses, and how errors are returned.
+Locksmith is a REST API for managing the full lifecycle of API keys: issuance, validation, and retrieval today, with activation, rotation, revocation, and permission management planned next. It is called by a single trusted internal service that uses the keys it receives to authenticate its own downstream consumers. This document covers every implemented endpoint: the request shape, all possible responses, and how errors are returned. Planned-but-unbuilt endpoints are listed separately at the end so this document never claims more than what exists.
 
-Quick links: [Authentication](#authentication) · [Key states](#key-states) · [Key management](#key-management) · [Action management](#action-management) · [Infrastructure](#infrastructure) · [Error responses](#error-responses) · [Happy-path flow](#happy-path-flow)
+Quick links: [Authentication](#authentication) · [Key states](#key-states) · [Key management](#key-management) · [Infrastructure](#infrastructure) · [Error responses](#error-responses) · [Happy-path flow](#happy-path-flow) · [Planned endpoints](#planned-endpoints-not-yet-implemented)
 
 ---
 
 ## Authentication
 
-All management endpoints require a static bearer token configured at deploy time.
+All management endpoints require a static bearer token configured at deploy time (`ApiSettings.BearerToken`).
 
 ```http
-Authorization: Bearer <LOCKSMITH_ADMIN_TOKEN>
+Authorization: Bearer <token>
 ```
 
 Any request missing this header, or presenting the wrong token, receives a `401 Unauthorized` before any handler runs. The token is compared with constant-time equality (`CryptographicOperations.FixedTimeEquals`) to prevent timing attacks. Inject it via environment variable or secrets manager — never commit it to source control.
@@ -22,240 +22,168 @@ See [ADR-004](../Decisions/ADR-004-authentication.md) for the full reasoning.
 
 ## Key states
 
-A key moves through a defined set of states. The state history is stored in a separate append-only table, preserving every transition for audit purposes. See [ADR-001](../Decisions/ADR-001-api-key-lifecycle.md).
+A key moves through a defined set of states. The state history is stored in a separate append-only table (`api_key_statuses`), preserving every transition for audit purposes. See [ADR-001](../Decisions/ADR-001-api-key-lifecycle.md).
 
 | State | Meaning |
 |---|---|
-| `Inactive` | Created but not yet activated. Any request using this key is rejected. |
+| `Inactive` | Created but not yet activated. This is the state every key starts in. |
 | `Active` | Accepted for use by downstream consumers. |
-| `Revoked` | Permanently disabled. Cannot be re-activated. Record and full history are preserved (soft delete). |
-| `Expired` | Past its `expiresAt` date. Treated as invalid. Recorded in the state history. |
+| `Revoked` | Permanently disabled. Cannot be re-activated. |
+| `Expired` | Past its `expiresAt` date. Treated as invalid. |
 
-Valid transitions:
-
-- `Inactive → Active` (activate via PATCH)
-- `Active → Inactive` (deactivate via PATCH)
-- `Active` or `Inactive → Revoked` (via DELETE)
-- Any → `Expired` automatically when `expiresAt` is reached
+Today, `Inactive` is the only status ever written — it is set once at creation and nothing currently transitions a key to `Active`, `Revoked`, or `Expired`. The `PATCH`/rotate/revoke endpoints and the Agent expiry job that would drive those transitions are not yet implemented; see [Planned endpoints](#planned-endpoints-not-yet-implemented) and [TODO.md](../TODO.md).
 
 ---
 
 ## Key management
 
+Routes use `/api/v{version}/api-keys` (plural, hyphenated) — not `/api/v1/keys`.
+
 ### Issue a key
 
 ```http
-POST /api/v1/keys
+POST /api/v{version}/api-keys
 ```
 
-Creates a new API key. The raw key is returned in the response body and is also stored encrypted at rest — it can be retrieved later via [GET /api/v1/keys/{keyId}/secret](#retrieve-the-raw-key). The key starts in `Inactive` state; activate it with [PATCH](#activate-or-deactivate-a-key) before it can be used. See [ADR-002](../Decisions/ADR-002-api-key-creation.md).
+Creates a new API key in `Inactive` state. Generates a random secret and a random idempotency key, encrypts the secret at rest (AES-256-GCM with a per-key Argon2id-derived DEK), and returns the plaintext secret and idempotency key exactly once. See [ADR-002](../Decisions/ADR-002-api-key-creation.md).
 
 **Headers**
 
 | Header | Required | Description |
 |---|---|---|
 | `Authorization` | Yes | `Bearer <token>` |
-| `Idempotency-Key` | Recommended | Client-generated UUID. Repeating the same value on retry returns the original `201` body without creating a second key. |
 
 **Request body**
 
 ```json
 {
-  "ownerId": "svc_billing",
-  "expiresInDays": 90
+  "expiresAt": "2026-09-01T12:00:00Z",
+  "actions": ["Read", "Write"]
 }
 ```
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `ownerId` | `string` | Yes | Identifier of the entity this key belongs to. |
-| `expiresInDays` | `integer` | Yes | Days from now until the key expires. Minimum `1`. |
+| `expiresAt` | `string` (ISO 8601) | No | Moment the key expires. Must be in the future. Defaults to 30 days from creation when omitted. |
+| `actions` | `string[]` | No | Actions to grant on the new key. Valid values: `Read`, `Write`, `Delete`, `Execute`. Defaults to none. |
 
 **Response 201 — created**
 
 ```json
 {
-  "keyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "key": "...",
-  "ownerId": "svc_billing",
-  "status": "Inactive",
-  "createdAt": "2026-06-03T12:00:00Z",
-  "expiresAt": "2026-09-01T12:00:00Z"
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "secret": "lk_...",
+  "idempotencyKey": "..."
 }
 ```
 
-**Response 409 — idempotency conflict**
-
-The `Idempotency-Key` was already used. The body is identical to the original `201`.
+`secret` and `idempotencyKey` are returned only in this response — store both securely. `idempotencyKey` is required later to retrieve the secret via [Retrieve the raw secret](#retrieve-the-raw-secret). The response also sets `Cache-Control: no-store, no-cache, must-revalidate, max-age=0` and `Pragma: no-cache` so intermediaries never cache the secret.
 
 **Response 422 — validation error**
 
-See [Error responses](#error-responses).
+Returned when `expiresAt` is not in the future. See [Error responses](#error-responses).
+
+---
+
+### List keys
+
+```http
+GET /api/v{version}/api-keys?limit=&offset=
+```
+
+Returns a page of key metadata (no raw secrets).
+
+| Query param | Default | Description |
+|---|---|---|
+| `limit` | `50` | Max items to return. Values `<= 0` or `> 1000` fall back to the default. |
+| `offset` | `0` | Items to skip. Negative values fall back to `0`. |
+
+**Response 200**
+
+```json
+{
+  "items": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "maskedSecretHash": "****...a1b2",
+      "createdAt": "2026-06-03T12:00:00Z",
+      "createdBy": "<bearer token>",
+      "expiresAt": "2026-09-01T12:00:00Z",
+      "status": "Inactive",
+      "actions": ["Read"]
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
 
 ---
 
 ### Get key metadata
 
 ```http
-GET /api/v1/keys/{keyId}
+GET /api/v{version}/api-keys/{id}
 ```
 
-Returns metadata for a key. Does not return the key value — use [/secret](#retrieve-the-raw-key) for that.
+Returns metadata for a single key. Does not return the secret — use [Retrieve the raw secret](#retrieve-the-raw-secret) for that. `status` is derived from the most recent row in `api_key_statuses`; `actions` excludes soft-deleted grants.
 
-**Response 200**
-
-```json
-{
-  "keyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "ownerId": "svc_billing",
-  "status": "Active",
-  "actions": ["read", "write"],
-  "createdAt": "2026-06-03T12:00:00Z",
-  "expiresAt": "2026-09-01T12:00:00Z"
-}
-```
+**Response 200** — same shape as one item in the [list](#list-keys) response.
 
 **Response 404** — key not found.
 
 ---
 
-### Retrieve the raw key
+### Validate a secret
 
 ```http
-GET /api/v1/keys/{keyId}/secret
+POST /api/v{version}/api-keys/validate
 ```
 
-Returns the raw key value. The key is stored encrypted at rest in PostgreSQL using a data encryption key (DEK); this endpoint decrypts and returns it. The same bearer token is required.
-
-> **Security note:** The raw key is a high-value secret. This response must travel over TLS. The value must never be written to logs. See the [threat model](../Security/threat-model.md) (EP-2a, A-2, A-7) for full risk details.
-
-**Response 200**
-
-```json
-{
-  "keyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "key": "..."
-}
-```
-
-**Response 404** — key not found.
-
----
-
-### Activate or deactivate a key
-
-```http
-PATCH /api/v1/keys/{keyId}
-```
-
-Transitions the key between `Active` and `Inactive`. Each transition is appended to the state history.
+Hashes a presented secret and looks it up by the unique `SecretHash` index. Returns whether it belongs to a key and that key's current status. Does **not** return the raw secret.
 
 **Request body**
 
 ```json
 {
+  "secret": "lk_..."
+}
+```
+
+**Response 200**
+
+```json
+{
+  "apiKeyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "isValid": true,
   "status": "Active"
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `status` | `string` | Yes | Target state. One of: `Active`, `Inactive`. |
+`isValid` is `true` only when the key's current status is `Active`.
 
-**Response 200**
+**Response 404** — no key matches the presented secret.
 
-```json
-{
-  "keyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "status": "Active"
-}
-```
-
-**Response 404** — key not found.
-
-**Response 409** — key is already in the requested state, or is `Revoked`/`Expired` and cannot be transitioned.
-
-**Response 422** — `status` is not a valid value.
+**Response 422** — `secret` is empty or whitespace.
 
 ---
 
-### Rotate a key
+### Retrieve the raw secret
 
 ```http
-POST /api/v1/keys/{keyId}/rotate
+POST /api/v{version}/api-keys/retrieve-secret
 ```
 
-Generates a new secret for an existing key. The old secret is invalidated immediately. The key ID, owner, expiry, and actions are unchanged. The new raw value is returned in the response and stored encrypted at rest.
+Decrypts and returns the raw secret, looked up by the idempotency key returned at creation time (not by `{keyId}` in the path, and not via `GET`).
 
-**Response 200**
-
-```json
-{
-  "keyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "key": "...",
-  "status": "Active",
-  "rotatedAt": "2026-06-03T14:30:00Z"
-}
-```
-
-**Response 404** — key not found.
-
-**Response 409** — key is `Revoked` or `Expired` and cannot be rotated.
-
----
-
-### Revoke a key
-
-```http
-DELETE /api/v1/keys/{keyId}
-```
-
-Permanently revokes the key. A `Revoked` status entry is appended to the state history. The key record is never physically removed — full history is preserved for audit.
-
-**Response 204** — revoked. No body.
-
-**Response 404** — key not found.
-
----
-
-## Action management
-
-Actions define what a key holder is permitted to do. Per-key least-privilege: a compromised key's blast radius is bounded by exactly the actions assigned to it. Valid action names: `read`, `write`, `delete`, `execute`. A key with no actions cannot authorize any operation.
-
-Actions are stored in a normalized junction table (`api_key_permissions`) so they can be granted or revoked independently of the key. See [ADR-003](../Decisions/ADR-003-api-key-action-management.md).
-
-### List actions
-
-```http
-GET /api/v1/keys/{keyId}/actions
-```
-
-**Response 200**
-
-```json
-{
-  "keyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "actions": ["read", "write"]
-}
-```
-
-**Response 404** — key not found.
-
----
-
-### Replace all actions
-
-```http
-PUT /api/v1/keys/{keyId}/actions
-```
-
-Replaces the full set of actions for the key. Any actions not in the new list are revoked.
+> **Security note:** The raw key is a high-value secret. This response must travel over TLS and must never be written to logs. See the [threat model](../Security/threat-model.md) (EP-4, A-2, A-7) for full risk details.
 
 **Request body**
 
 ```json
 {
-  "actions": ["read", "write", "delete"]
+  "idempotencyKey": "..."
 }
 ```
 
@@ -263,52 +191,20 @@ Replaces the full set of actions for the key. Any actions not in the new list ar
 
 ```json
 {
-  "keyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "actions": ["read", "write", "delete"]
+  "apiKeyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "secret": "lk_..."
 }
 ```
 
-**Response 404** — key not found.
+**Response 404** — no idempotency key record matches.
 
-**Response 422** — one or more action names are not valid.
-
----
-
-### Grant an action
-
-```http
-POST /api/v1/keys/{keyId}/actions/{action}
-```
-
-Grants a single action. Valid values for `{action}`: `read`, `write`, `delete`, `execute`.
-
-**Response 204** — granted. No body.
-
-**Response 404** — key not found.
-
-**Response 409** — action is already granted.
-
-**Response 422** — `{action}` is not a valid action name.
-
----
-
-### Revoke an action
-
-```http
-DELETE /api/v1/keys/{keyId}/actions/{action}
-```
-
-Revokes a single action from the key.
-
-**Response 204** — revoked. No body.
-
-**Response 404** — key not found, or action was not granted.
+**Response 422** — `idempotencyKey` is empty or whitespace, or (rarely) `422` if stored ciphertext fails to decrypt (`DecryptionFailedException`).
 
 ---
 
 ## Infrastructure
 
-These endpoints are unversioned (not under `/api/v1/`) and do not require authentication.
+These endpoints are unversioned (not under `/api/v{version}/`) and do not require authentication.
 
 ### Liveness probe
 
@@ -316,7 +212,7 @@ These endpoints are unversioned (not under `/api/v1/`) and do not require authen
 GET /health
 ```
 
-Returns `Healthy` as long as the process is running. No dependency checks. Use for container liveness probes.
+Always returns `Healthy` as long as the process is running. No dependency checks. Use for container liveness probes.
 
 **Response 200**
 
@@ -332,7 +228,7 @@ Returns `Healthy` as long as the process is running. No dependency checks. Use f
 GET /health/ready
 ```
 
-Runs checks for dependencies tagged `"ready"` (database, cache). Returns `Healthy` only when all are reachable. Use for container readiness probes.
+Runs checks tagged `"ready"` (EF Core database, Redis cache). Returns `Healthy` only when all dependencies are reachable. Use for container readiness probes.
 
 **Response 200 — ready**
 
@@ -362,18 +258,18 @@ All error responses follow [RFC 9457 ProblemDetails](https://www.rfc-editor.org/
 |---|---|
 | `401 Unauthorized` | Missing or invalid bearer token |
 | `404 Not Found` | Resource does not exist |
-| `409 Conflict` | State transition not allowed; or idempotency key already used |
-| `422 Unprocessable Entity` | Request body failed validation — field-level errors in `errors` |
+| `422 Unprocessable Entity` | Request body failed validation (field-level errors in `errors`), or a stored secret failed to decrypt |
 | `500 Internal Server Error` | Unhandled exception — `detail` is redacted outside Development |
+
+`409 Conflict` is mapped in the global exception handler for `ConflictException`, but no current endpoint throws it — it is reserved for the planned state-transition and action-grant endpoints (see below).
 
 ```json
 {
-  "type": "https://tools.ietf.org/html/rfc9457",
-  "title": "Validation failed",
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.21",
+  "title": "Unprocessable Entity",
   "status": 422,
   "errors": {
-    "ownerId": ["The ownerId field is required."],
-    "expiresInDays": ["Must be at least 1."]
+    "ExpiresAt": ["ExpiresAt must be in the future."]
   }
 }
 ```
@@ -382,11 +278,26 @@ All error responses follow [RFC 9457 ProblemDetails](https://www.rfc-editor.org/
 
 ## Happy-path flow
 
-The typical sequence from first request to a key ready for use by a downstream consumer:
+The sequence supported by what's implemented today:
 
-1. **Issue** — `POST /api/v1/keys` → save the returned `key` value.
-2. **Grant actions** — `PUT /api/v1/keys/{keyId}/actions` with the permissions this key should carry.
-3. **Activate** — `PATCH /api/v1/keys/{keyId}` with `{ "status": "Active" }` → key is now live.
-4. **Distribute** — the caller delivers the raw key to its downstream consumer over a secure channel.
-5. **Rotate** (when needed) — `POST /api/v1/keys/{keyId}/rotate` → distribute the new key; the old secret is invalid immediately.
-6. **Revoke** (when done) — `DELETE /api/v1/keys/{keyId}` → key is permanently retired; full history preserved.
+1. **Issue** — `POST /api/v{version}/api-keys` → save the returned `secret` and `idempotencyKey`.
+2. **Distribute** — the caller delivers the raw secret to its downstream consumer over a secure channel.
+3. **Validate** — a consumer's request can be checked with `POST /api/v{version}/api-keys/validate`, which also reports the key's current status.
+4. **Retrieve again if needed** — `POST /api/v{version}/api-keys/retrieve-secret` with the saved `idempotencyKey` re-derives the DEK and decrypts the stored secret.
+
+There is currently no way to activate a key (every key stays `Inactive` forever), so `isValid` from the validate endpoint will always be `false` until [`PatchApiKeyStatus`](#planned-endpoints-not-yet-implemented) ships.
+
+---
+
+## Planned endpoints (not yet implemented)
+
+These are designed but not built — see [TODO.md](../TODO.md) for current status. Do not rely on them existing yet.
+
+- `PATCH /api/v{version}/api-keys/{id}` — activate/deactivate; `409` on invalid transition
+- `POST /api/v{version}/api-keys/{id}/rotate` — issue a new secret, invalidate the old one
+- `DELETE /api/v{version}/api-keys/{id}` — revoke permanently
+- `GET /api/v{version}/api-keys/{id}/actions` — list granted actions
+- `PUT /api/v{version}/api-keys/{id}/actions` — replace the full action set
+- `POST /api/v{version}/api-keys/{id}/actions/{action}` — grant a single action
+- `DELETE /api/v{version}/api-keys/{id}/actions/{action}` — revoke a single action
+- `Idempotency-Key` request-deduplication semantics (client-supplied header, `409` on replay with a different body) — distinct from the idempotency key Locksmith generates and returns today, which is used only for secret retrieval

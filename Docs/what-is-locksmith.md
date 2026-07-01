@@ -1,6 +1,6 @@
 # What is Locksmith?
 
-Locksmith is a self-contained REST API service that manages the full lifecycle of API keys for internal services. Its job is simple to state: it creates API keys securely, controls what those keys are allowed to do, and provides the infrastructure to activate, deactivate, rotate, and revoke them over time — while maintaining a permanent, tamper-evident audit trail of every state change.
+Locksmith is a self-contained REST API service being built to manage the full lifecycle of API keys for internal services. Its job is simple to state: create API keys securely, control what those keys are allowed to do, and provide the infrastructure to activate, deactivate, rotate, and revoke them over time — while maintaining a permanent, tamper-evident audit trail of every state change. Today it covers secure creation, listing, secret validation, and secret retrieval; the state-transition and permission-management endpoints described in [what Locksmith will do next](#what-locksmith-will-do-next) are designed but not yet built. See [TODO.md](TODO.md) for exact status.
 
 ## The problem it solves
 
@@ -10,9 +10,9 @@ Any service that exposes a programmatic interface needs a way to authenticate it
 
 ### Secure key creation
 
-When a caller requests a new API key, Locksmith generates a cryptographically random secret, hashes it with a salt using a secure algorithm, and stores only the hash. The raw key is returned to the caller exactly once and never persisted. All subsequent validation re-hashes the presented key and compares against the stored hash. There is no way to recover a key after creation — only to revoke it and issue a new one.
+When a caller requests a new API key, Locksmith generates a cryptographically random secret and a random idempotency key, hashes the secret with SHA-256 for lookup, and encrypts it at rest with AES-256-GCM using a per-key DEK derived via Argon2id. The raw secret and the idempotency key are returned to the caller exactly once at creation. Unlike a pure hash-and-discard design, the raw secret *can* be recovered later — by presenting the idempotency key to the retrieval endpoint, which re-derives the DEK and decrypts the stored ciphertext. This trade-off exists because the caller needs a way to re-fetch a secret it failed to persist on its end without Locksmith ever storing the secret in plaintext.
 
-Keys start in an **inactive** state. The caller must explicitly activate a key before it can be used to authenticate requests. This prevents accidentally live credentials from being issued before a consumer is ready to receive them.
+Keys start in an **Inactive** state. Nothing currently transitions a key out of `Inactive` — activation, deactivation, rotation, and revocation are designed (see [ADR-001](Decisions/ADR-001-api-key-lifecycle.md)) but not yet implemented. See [what Locksmith will do next](#what-locksmith-will-do-next).
 
 ### Lifecycle state machine
 
@@ -20,25 +20,27 @@ Each key moves through a defined set of states:
 
 | State | Meaning |
 |---|---|
-| Inactive | Created but not yet usable. Default state at creation. |
-| Active | Authorized to authenticate requests. |
-| Deactivated | Temporarily suspended. Can be re-activated. |
-| Revoked | Permanently retired. Cannot be reinstated. |
+| Inactive | Created but not yet usable. Default state at creation, and currently the only state ever reached. |
+| Active | Authorized to authenticate requests. Not yet reachable — no activation endpoint exists yet. |
+| Revoked | Permanently retired. Cannot be reinstated. Not yet reachable. |
+| Expired | Past its expiry date. Not yet reachable — no expiry job exists yet. |
 
 State history is stored in a separate, **append-only** status table. The key record itself is never modified or deleted — every transition is a new row. This means the full history of a key's lifecycle is always available for audit and forensic investigation, and soft deletes preserve evidence of the moment a key was retired.
 
 ### Per-key action permissions
 
-Not every API key should have the same privileges. Locksmith assigns actions to keys via a normalized junction table, giving each key an independently configurable set of allowed operations:
+Not every API key should have the same privileges. Locksmith assigns actions to keys via a normalized junction table (`api_key_actions`), giving each key an independently configurable set of allowed operations:
 
-- `read`
-- `write`
-- `delete`
-- `execute`
+- `Read`
+- `Write`
+- `Delete`
+- `Execute`
 
-This follows the principle of least privilege: a key carries only the permissions it needs, so a compromised key's blast radius is bounded by its specific grants. Permissions can be added or revoked without touching the key itself.
+This follows the principle of least privilege: a key carries only the permissions it needs, so a compromised key's blast radius is bounded by its specific grants. Today, actions can only be set at creation time (via the `actions` field on `POST /api-keys`); the dedicated grant/revoke/list/replace endpoints described in [what Locksmith will do next](#what-locksmith-will-do-next) don't exist yet, so permissions can't currently be changed after a key is issued.
 
-Only the key owner or an administrator can modify a key's permissions, enforced at the authorization layer. This is a deliberate constraint — without it, privilege escalation becomes a realistic attack vector.
+### Validating and retrieving keys
+
+`POST /api-keys/validate` hashes a presented secret, looks it up, and reports whether it's known and what status it currently has. `POST /api-keys/retrieve-secret` re-derives the encryption key from a caller-supplied idempotency key and decrypts the stored secret — this is how a caller recovers a secret it failed to persist after creation, without Locksmith ever having stored it in plaintext.
 
 ### Authentication of the management surface
 
@@ -48,18 +50,18 @@ This approach was chosen because, at this stage, Locksmith has exactly one inter
 
 ## What Locksmith will do next
 
-The following capabilities are planned and directly follow from the design decisions already made:
+The following capabilities are designed (see the linked ADRs) but not yet built — see [api-surface.md](Architecture/api-surface.md#planned-endpoints-not-yet-implemented) and [TODO.md](TODO.md) for exact status:
 
 **Key lifecycle endpoints**
-- `POST /api-keys` — create and issue a key (returns raw secret once)
-- `PUT /api-keys/{id}/activate` — move key to Active
-- `PUT /api-keys/{id}/deactivate` — suspend without revoking
-- `PUT /api-keys/{id}/revoke` — permanently retire
-- `PUT /api-keys/{id}/rotate` — issue a new key and revoke the old one atomically
+- `PATCH /api-keys/{id}` — activate or deactivate a key
+- `POST /api-keys/{id}/rotate` — issue a new secret and invalidate the old one atomically
+- `DELETE /api-keys/{id}` — revoke a key permanently
 
 **Permission management endpoints**
-- `POST /api-keys/{id}/actions` — grant a permission
-- `DELETE /api-keys/{id}/actions/{action}` — revoke a permission
+- `GET /api-keys/{id}/actions` — list an existing key's granted actions
+- `PUT /api-keys/{id}/actions` — replace the full action set
+- `POST /api-keys/{id}/actions/{action}` — grant a single permission after issuance
+- `DELETE /api-keys/{id}/actions/{action}` — revoke a single permission
 
 **Operational capabilities**
 - Rate limiting enforced at the middleware layer per key

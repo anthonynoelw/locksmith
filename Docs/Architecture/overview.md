@@ -26,7 +26,7 @@ This layer is pure .NET. It knows nothing about databases, HTTP, or external ser
 
 Located in `Src/Application/`. Contains use cases and application services.
 
-- **Services:** `CreateApiKeyService`, validators, business logic that orchestrates across repositories
+- **Services:** `CreateApiKeyService`, `ListApiKeysService`, `GetApiKeyByIdService`, `ValidateApiKeySecretService`, `RetrieveSecretService` — business logic that orchestrates across repositories. No FluentValidation validators exist yet; validation is inline in the services (e.g. `ExpiresAt` checked in `CreateApiKeyService`).
 - **Interfaces:** `IApiKeyRepository`, `IUnitOfWork`, `ICryptoService` — contracts for infrastructure concerns
 - **DTOs and request/response models** — application-level data contracts
 
@@ -83,17 +83,18 @@ If an application service throws a domain exception, the global exception handle
 |---|---|---|
 | `NotFoundException` | 404 | Resource doesn't exist |
 | `ValidationException` | 422 | Request body failed validation; includes field-level errors |
-| `ConflictException` | 409 | State transition not allowed, or idempotency key already used |
+| `ConflictException` | 409 | State transition not allowed, or idempotency key already used (reserved — no current endpoint throws this yet) |
+| `DecryptionFailedException` | 422 | Stored ciphertext failed to decrypt (thrown by `RetrieveSecretService`) |
 | (unhandled) | 500 | Any other exception; detail is redacted outside Development |
 
 Example validation error response:
 ```json
 {
-  "type": "https://tools.ietf.org/html/rfc9457",
-  "title": "Validation failed",
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.21",
+  "title": "Unprocessable Entity",
   "status": 422,
   "errors": {
-    "expiresInDays": ["Must be at least 1."]
+    "ExpiresAt": ["ExpiresAt must be in the future."]
   }
 }
 ```
@@ -287,13 +288,14 @@ Locksmith stores four entity types with specific constraints to preserve audit h
 
 ```
 id: GUID (primary key)
-ownerId: string
-createdAt: DateTime
-expiresAt: DateTime
+secret: string (AES-256-GCM ciphertext)
 secretHash: string (unique index)
+createdAt: DateTime
+createdBy: string
+expiresAt: DateTime
 ```
 
-The key record itself is never updated or deleted. State changes are tracked in a separate `ApiKeyStatus` table.
+There is no `ownerId` field — the entity has no concept of a key owner today. The key record itself is never updated or deleted. State changes are tracked in a separate `ApiKeyStatus` table.
 
 ### `ApiKeyStatus` — append-only state history
 
@@ -319,19 +321,19 @@ deletedAt: DateTime (soft delete)
 
 Permissions are stored separately so they can be granted or revoked independently of key state. Soft deletes preserve the record of when a permission was revoked.
 
-### `IdempotencyKey` — deduplication for retries
+### `IdempotencyKey` — secret retrieval, not request deduplication
 
 ```
 id: GUID (primary key)
-idempotencyKeyHash: string (unique index)
 apiKeyId: GUID (foreign key)
-cachedResponse: string (JSON)
+idempotencyKeyHash: string (unique index)
+salt: string (base64, Argon2id salt for the DEK)
 createdAt: DateTime
-expiresAt: DateTime
+createdBy: string
 deletedAt: DateTime (soft delete)
 ```
 
-Used to detect duplicate requests: if the same `Idempotency-Key` header is sent twice, return the cached response instead of creating a second key.
+Despite the name, this table does not currently deduplicate retried requests. It stores the salt needed to re-derive the per-key DEK, so that a caller who saved the idempotency key returned at creation can later call `POST /api-keys/retrieve-secret` to decrypt and re-fetch the raw secret. There is no `cachedResponse` field and no request-level dedup cache yet — see [api-surface.md](api-surface.md#planned-endpoints-not-yet-implemented).
 
 ### Query filters
 

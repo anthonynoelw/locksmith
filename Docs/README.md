@@ -1,23 +1,17 @@
-# .NET 10 Project Template
+# Locksmith — Documentation Index
 
-Locksmith is a self-contained ASP.NET Core Rest API service for secure API key lifecycle management.
-
-## What you get
-
-## Locksmith — Documentation Index
-
-Locksmith is an ASP.NET Core API that issues, rotates, and revokes API keys with
-HMAC-SHA256 hashing at rest and per-key rate limiting enforced at the middleware layer.
+Locksmith is a self-contained ASP.NET Core REST API for secure API key lifecycle management. Today it issues, lists, validates, and retrieves API keys, hashing secrets with SHA-256 for lookup and encrypting them at rest with AES-256-GCM under a per-key Argon2id-derived DEK. Rotation, revocation, and per-key rate limiting are designed but not yet implemented — see [TODO.md](TODO.md).
 
 ### Where to look for what
 
 | I want to understand... | Go to |
 |---|---|
-| What the system does and how it is structured | `architecture/overview.md` |
-| What endpoints exist and what they return | `architecture/api-surface.md` |
-| Why a specific technical decision was made | `decisions/` |
-| What I learned implementing each concept | `concepts/` |
-| What threats the design defends against | `security/threat-model.md` |
+| What the system does and how it is structured | `Architecture/overview.md` |
+| What endpoints exist and what they return | `Architecture/api-surface.md` |
+| Why a specific technical decision was made | `Decisions/` |
+| What I learned implementing each concept | `Concepts/` |
+| What threats the design defends against | `Security/threat-model.md` |
+| What's done vs. still outstanding | `TODO.md` |
 
 ### Development tooling
 
@@ -44,7 +38,7 @@ HMAC-SHA256 hashing at rest and per-key rate limiting enforced at the middleware
 
 - **.NET 10 SDK** — [Download](https://dot.net/)
 - **Node.js 18+** — For git hooks
-- **Docker** (optional)
+- **Docker**
 
 ### Setup
 
@@ -86,9 +80,6 @@ OpenAPI docs: `/openapi/v1.json` (Development only)
 docker-compose -f Docker/docker-compose.yml up
 ```
 
-## What's included
-
-
 ## Contributing
 
 All commits must follow [Conventional Commits](https://www.conventionalcommits.org/):
@@ -104,7 +95,7 @@ The setup script installs hooks that enforce this automatically.
 ### Documentation expectations
 
 Any change that introduces or alters a design decision must be accompanied by
-an ADR in `docs/decisions/`. If you are unsure whether your change qualifies,
+an ADR in `Docs/Decisions/`. If you are unsure whether your change qualifies,
 ask yourself: "Would a reviewer reasonably wonder *why* I did it this way instead
 of another?" If yes, write the ADR.
 
