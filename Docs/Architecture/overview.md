@@ -47,7 +47,7 @@ Located in `Src/Api/`. ASP.NET Core entry point. Hosts HTTP endpoints and orches
 - **Controllers:** inherit from `Src/Api/Controllers/Controller.cs` which carries the versioned route template (`/api/v{version}/`)
 - **Global exception handler:** catches domain exceptions, converts to RFC 9457 ProblemDetails
 - **Middleware:** Serilog request logging, authorization, health checks
-- **OpenAPI:** Swagger/OpenAPI automatic documentation in Development environment
+- **OpenAPI:** automatic OpenAPI document generation (`/openapi/v1.json`) plus a [Scalar](https://scalar.com/) UI (`/scalar/v1`) in Development environment
 
 ### Agent
 
@@ -67,7 +67,7 @@ When an HTTP request arrives at the Api, it travels through this pipeline (in `U
 
 1. **Serilog request logging** — captures timestamp, HTTP method, path, query string, request headers
 2. **Global exception handler** — wraps downstream execution; catches domain exceptions and converts them to ProblemDetails
-3. **OpenAPI UI middleware** (Development only) — serves Swagger UI at `/swagger`
+3. **OpenAPI middleware** (Development only) — serves the OpenAPI document at `/openapi/v1.json` and a Scalar UI at `/scalar/v1`
 4. **HTTPS redirect** — upgrades HTTP to HTTPS in non-Development environments
 5. **Authorization middleware** — validates `Authorization: Bearer <token>` header using constant-time comparison; returns `401` on invalid token
 6. **Controller routing** — matches request to a controller action based on route template and HTTP method
@@ -146,7 +146,7 @@ GET /api/v1/api-keys/{keyId}
 PATCH /api/v1/api-keys/{keyId}
 ```
 
-The base controller at `Src/Api/Controllers/Controller.cs` carries the route template; all controllers inherit from it. Each API version can have its own OpenAPI (Swagger) document via `ApiVersionDocumentTransformer`.
+The base controller at `Src/Api/Controllers/Controller.cs` carries the route template; all controllers inherit from it. Each API version can have its own OpenAPI document via `ApiVersionDocumentTransformer`, browsable through the Scalar UI at `/scalar/v1`.
 
 To add a new version, create a new controller that inherits from the base and override the route if needed. Old versions remain in the codebase until explicitly removed.
 
@@ -247,7 +247,7 @@ Two extension methods on `IHostApplicationBuilder` keep `Program.cs` clean:
 Registers:
 - Controllers and routing
 - API versioning
-- OpenAPI (Swagger) configuration
+- OpenAPI document generation + Scalar UI configuration
 - Global exception handler
 - Health checks (with `"ready"` tags for EF Core and Redis)
 - ProblemDetails formatting
@@ -272,7 +272,7 @@ Registered in shared extension method in Infrastructure layer:
 Extension method on `WebApplication` applies the request pipeline in order:
 - Serilog request logging
 - Exception handler
-- OpenAPI UI (Development)
+- OpenAPI document + Scalar UI (Development)
 - HTTPS redirect
 - Authorization middleware
 - Controller routing

@@ -250,6 +250,17 @@ Runs checks tagged `"ready"` (EF Core database, Redis cache). Returns `Healthy` 
 
 ---
 
+### OpenAPI document and UI (Development only)
+
+```http
+GET /openapi/v1.json
+GET /scalar/v1
+```
+
+`/openapi/v1.json` serves the generated OpenAPI 3 document for API version 1 (one document per version via `ApiVersionDocumentTransformer`). `/scalar/v1` serves a browsable [Scalar](https://scalar.com/) UI over that document. Both are only mapped when `ASPNETCORE_ENVIRONMENT=Development`.
+
+---
+
 ## Error responses
 
 All error responses follow [RFC 9457 ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457).

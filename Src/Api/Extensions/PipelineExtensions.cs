@@ -6,6 +6,8 @@ using HealthChecks.UI.Client;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
+using Scalar.AspNetCore;
+
 using Serilog;
 
 /// <summary>
@@ -38,6 +40,7 @@ internal static class PipelineExtensions
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
+            app.MapScalarApiReference();
         }
 
         app.UseHttpsRedirection();

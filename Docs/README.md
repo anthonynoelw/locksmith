@@ -24,7 +24,7 @@ Locksmith is a self-contained ASP.NET Core REST API for secure API key lifecycle
 
 - **Docker** — Multi-stage Dockerfile with health checks
 - **Docker Compose** — Local development environment configuration
-- **OpenAPI** — Automatic API documentation in development
+- **OpenAPI** — Automatic API documentation with a Scalar UI in development
 
 ### Testing
 
@@ -72,7 +72,8 @@ dotnet run --project Src/Agent/Agent.csproj
 ```
 
 API: `http://localhost:5000`  
-OpenAPI docs: `/openapi/v1.json` (Development only)
+OpenAPI docs: `/openapi/v1.json` (Development only)  
+Scalar UI: `/scalar/v1` (Development only)
 
 ### With Docker
 
