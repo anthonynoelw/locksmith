@@ -58,7 +58,7 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
     }
 
     [Fact]
-    public async Task POST_ValidateApiKeySecret_ReturnsValidationStatus()
+    public async Task POST_ValidateApiKeySecret_WhenKeyIsInactive_ReturnsIsValidFalse()
     {
         // Create a key
         var createRequest = new { actions = new[] { 0 } };
@@ -105,8 +105,7 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
 
         validationResult.Should().NotBeNull();
         validationResult!.ApiKeyId.Should().Be(keyId);
-        validationResult.Status.Should().Be("Inactive"); // Initially inactive
-        validationResult.IsValid.Should().BeFalse();
+        validationResult.IsValid.Should().BeFalse(); // Initially inactive
     }
 
     [Fact]

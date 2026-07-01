@@ -17,7 +17,7 @@ public sealed class ListApiKeysService : IListApiKeysService
     }
 
     /// <inheritdoc/>
-    public async Task<ListApiKeysResult> Execute(
+    public async Task<ListApiKeysResult> ExecuteAsync(
         int limit,
         int offset,
         CancellationToken cancellationToken = default)

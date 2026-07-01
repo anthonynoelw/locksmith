@@ -20,7 +20,7 @@ public sealed class RetrieveSecretService : IRetrieveSecretService
     }
 
     /// <inheritdoc/>
-    public async Task<RetrieveSecretResult> Execute(
+    public async Task<RetrieveSecretResult> ExecuteAsync(
         string idempotencyKey,
         CancellationToken cancellationToken = default)
     {

@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
 /// <summary>Manages API key lifecycle operations.</summary>
+[ApiController]
 [Route("api/v{version:apiVersion}/api-keys")]
 public sealed class ApiKeyController : Controller
 {
@@ -59,7 +60,7 @@ public sealed class ApiKeyController : Controller
         [FromBody] CreateApiKeyRequest request,
         CancellationToken cancellationToken)
     {
-        CreateApiKeyResult result = await _createApiKeyService.Execute(
+        CreateApiKeyResult result = await _createApiKeyService.ExecuteAsync(
             new CreateApiKeyCommand(
                 _apiSettings.BearerToken,
                 request.ExpiresAt,
@@ -86,7 +87,7 @@ public sealed class ApiKeyController : Controller
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        ListApiKeysResult result = await _listApiKeysService.Execute(limit, offset, cancellationToken);
+        ListApiKeysResult result = await _listApiKeysService.ExecuteAsync(limit, offset, cancellationToken);
 
         var items = result.Keys.Select(MapToMetadataResponse).ToList();
 
@@ -103,26 +104,9 @@ public sealed class ApiKeyController : Controller
         [FromRoute] Guid id,
         CancellationToken cancellationToken)
     {
-        ApiKey apiKey = await _getApiKeyByIdService.Execute(id, cancellationToken);
+        ApiKey apiKey = await _getApiKeyByIdService.ExecuteAsync(id, cancellationToken);
 
         return Ok(MapToMetadataResponse(apiKey));
-    }
-
-    /// <summary>Validates an API key secret and returns its current status.</summary>
-    /// <param name="request">The secret to validate.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>200 OK with validation result and current status, or 404 Not Found if secret is invalid.</returns>
-    [HttpPost("validate")]
-    [Authorize]
-    public async Task<IActionResult> Validate(
-        [FromBody] ValidateApiKeySecretRequest request,
-        CancellationToken cancellationToken)
-    {
-        ValidateApiKeySecretResult result = await _validateApiKeySecretService.Execute(
-            request.Secret,
-            cancellationToken);
-
-        return Ok(new ValidateApiKeySecretResponse(result.ApiKeyId, result.IsValid, result.Status));
     }
 
     /// <summary>Retrieves and decrypts an API key secret using its idempotency key.</summary>
@@ -135,11 +119,28 @@ public sealed class ApiKeyController : Controller
         [FromBody] RetrieveSecretRequest request,
         CancellationToken cancellationToken)
     {
-        RetrieveSecretResult result = await _retrieveSecretService.Execute(
+        RetrieveSecretResult result = await _retrieveSecretService.ExecuteAsync(
             request.IdempotencyKey,
             cancellationToken);
 
         return Ok(new RetrieveSecretResponse(result.ApiKeyId, result.Secret));
+    }
+
+    /// <summary>Validates an API key secret and returns its current status.</summary>
+    /// <param name="request">The secret to validate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with validation result and current status, or 404 Not Found if secret is invalid.</returns>
+    [HttpPost("validate")]
+    [Authorize]
+    public async Task<IActionResult> Validate(
+        [FromBody] ValidateApiKeySecretRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidateApiKeySecretResult result = await _validateApiKeySecretService.ExecuteAsync(
+            request.Secret,
+            cancellationToken);
+
+        return Ok(new ValidateApiKeySecretResponse(result.ApiKeyId, result.IsValid));
     }
 
     private static ApiKeyMetadataResponse MapToMetadataResponse(ApiKey apiKey)

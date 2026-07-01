@@ -9,7 +9,7 @@ public interface IRetrieveSecretService
     /// <param name="idempotencyKey">The plaintext idempotency key for decryption.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The API key ID and decrypted plaintext secret.</returns>
-    public Task<RetrieveSecretResult> Execute(string idempotencyKey, CancellationToken cancellationToken = default);
+    public Task<RetrieveSecretResult> ExecuteAsync(string idempotencyKey, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Result of retrieving and decrypting a secret.</summary>
