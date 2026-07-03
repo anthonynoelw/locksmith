@@ -14,19 +14,19 @@ using Microsoft.AspNetCore.Mvc;
 /// </summary>
 [ApiController]
 [Route("api/v{version:apiVersion}/api-keys/status")]
-public sealed class ApiKeyStatusControllerController : Controller
+public sealed class ApiKeyStatusController : Controller
 {
     private readonly IGetApiKeyStatusService _getApiKeyStatusService;
     private readonly IGetApiKeyStatusHistoryService _getApiKeyStatusHistoryService;
     private readonly IUpdateApiKeyStatusService _updateApiKeyStatusService;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ApiKeyStatusControllerController"/> class.
+    /// Initializes a new instance of the <see cref="ApiKeyStatusController"/> class.
     /// </summary>
     /// <param name="getApiKeyStatusService">The service to get the current status of an API key by its ID.</param>
     /// <param name="getApiKeyStatusHistoryService">The service to get the status history of an API key by its ID.</param>
     /// <param name="updateApiKeyStatusService">The service to update an API key Status by its IdempotencyKey.</param>
-    public ApiKeyStatusControllerController(
+    public ApiKeyStatusController(
         IGetApiKeyStatusService getApiKeyStatusService,
         IGetApiKeyStatusHistoryService getApiKeyStatusHistoryService,
         IUpdateApiKeyStatusService updateApiKeyStatusService)
@@ -63,7 +63,7 @@ public sealed class ApiKeyStatusControllerController : Controller
     {
         IReadOnlyList<ApiKeyStatus> result = await _getApiKeyStatusHistoryService.ExecuteAsync(id, ct);
 
-        List<ApiKeyStatusHistoryResponse> statuses = result
+        var statuses = result
             .Select(s => new ApiKeyStatusHistoryResponse(s.Id, s.Status.ToString(), s.CreatedAt, s.DeletedAt))
             .ToList();
 
@@ -71,16 +71,18 @@ public sealed class ApiKeyStatusControllerController : Controller
     }
 
     /// <summary>
-    /// Gets all statuses for an API key.
+    /// Updates the status of an API key identified by its idempotency key.
     /// </summary>
-    /// <param name="id">The ID of the API key.</param>
+    /// <param name="request">The idempotency key and new status.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The statuses for the API key.</returns>
-    [HttpPatch("{id:guid}/update")]
+    /// <returns>200 OK once the status has been updated.</returns>
+    [HttpPatch("update")]
     [Authorize]
     public async Task<IActionResult> Update([FromBody] UpdateApiKeyStatusRequest request, CancellationToken ct)
     {
-        await _updateApiKeyStatusService.ExecuteAsync(request.IdempotencyKey, request.Status, ct);
+        // Status is [Required] and validated by ApiBehaviorOptions before this action runs,
+        // so a null value here can only mean model validation was bypassed.
+        await _updateApiKeyStatusService.ExecuteAsync(request.IdempotencyKey, request.Status!.Value, ct);
         return Ok();
     }
 }

@@ -11,7 +11,7 @@ using Domain.Models;
 /// <summary>
 /// Updates the status of an API key.
 /// </summary>
-public class UpdateApiKeyStatusService : IUpdateApiKeyStatusService
+public sealed class UpdateApiKeyStatusService : IUpdateApiKeyStatusService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICryptoService _cryptoService;

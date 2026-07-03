@@ -11,7 +11,7 @@ using Domain.Models;
 /// <summary>
 /// Retrieves the status history of an API key.
 /// </summary>
-public class GetApiKeyStatusHistoryService : IGetApiKeyStatusHistoryService
+public sealed class GetApiKeyStatusHistoryService : IGetApiKeyStatusHistoryService
 {
     private readonly IUnitOfWork _unitOfWork;
 
