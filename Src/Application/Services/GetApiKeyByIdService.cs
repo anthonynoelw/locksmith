@@ -18,7 +18,7 @@ public sealed class GetApiKeyByIdService : IGetApiKeyByIdService
     }
 
     /// <inheritdoc/>
-    public async Task<ApiKey> Execute(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ApiKey> ExecuteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         ApiKey? apiKey = await _unitOfWork.ApiKeys.GetByIdAsync(id, cancellationToken);
 

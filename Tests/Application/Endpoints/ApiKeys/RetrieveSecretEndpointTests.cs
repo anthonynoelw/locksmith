@@ -18,25 +18,8 @@ public sealed class RetrieveSecretEndpointTests(ApplicationFixture fixture) : Ap
     [Fact]
     public async Task POST_RetrieveSecret_WithValidIdempotencyKey_Returns200Ok()
     {
-        // Create a key
-        var createRequest = new { actions = new[] { 0 } }; // Read
-        StringContent createContent = new StringContent(
-            JsonSerializer.Serialize(createRequest, _jsonOptions),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var createMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = createContent,
-        };
-        createMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage createResponse = await Client.SendAsync(createMessage);
-        string createBody = await createResponse.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(createBody, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        string idempotencyKey = createdKey!.IdempotencyKey;
+        CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
+        string idempotencyKey = createdKey.IdempotencyKey;
 
         // Retrieve the secret
         var retrieveRequest = new { idempotencyKey };
@@ -59,25 +42,8 @@ public sealed class RetrieveSecretEndpointTests(ApplicationFixture fixture) : Ap
     [Fact]
     public async Task POST_RetrieveSecret_ReturnsDecryptedSecret()
     {
-        // Create a key
-        var createRequest = new { actions = new[] { 0, 1 } }; // Read, Write
-        StringContent createContent = new StringContent(
-            JsonSerializer.Serialize(createRequest, _jsonOptions),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var createMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = createContent,
-        };
-        createMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage createResponse = await Client.SendAsync(createMessage);
-        string createBody = await createResponse.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(createBody, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        string originalSecret = createdKey!.Secret;
+        CreateApiKeyResponse createdKey = await CreateApiKeyAsync([0, 1]); // Read, Write
+        string originalSecret = createdKey.Secret;
         string idempotencyKey = createdKey.IdempotencyKey;
         Guid keyId = createdKey.Id;
 

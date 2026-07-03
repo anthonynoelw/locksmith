@@ -9,7 +9,7 @@ public interface IValidateApiKeySecretService
     /// <param name="secret">The plaintext secret to validate.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The validation result containing API key ID, validity, and status.</returns>
-    public Task<ValidateApiKeySecretResult> Execute(string secret, CancellationToken cancellationToken = default);
+    public Task<ValidateApiKeySecretResult> ExecuteAsync(string secret, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Result of validating an API key secret.</summary>

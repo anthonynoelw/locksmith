@@ -21,7 +21,7 @@ public sealed class ValidateApiKeySecretService : IValidateApiKeySecretService
     }
 
     /// <inheritdoc/>
-    public async Task<ValidateApiKeySecretResult> Execute(
+    public async Task<ValidateApiKeySecretResult> ExecuteAsync(
         string secret,
         CancellationToken cancellationToken = default)
     {

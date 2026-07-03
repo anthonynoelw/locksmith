@@ -12,5 +12,5 @@ public interface IGetApiKeyByIdService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The API key.</returns>
     /// <exception cref="NotFoundException">Thrown when no API key with the specified ID exists.</exception>
-    public Task<ApiKey> Execute(Guid id, CancellationToken cancellationToken = default);
+    public Task<ApiKey> ExecuteAsync(Guid id, CancellationToken cancellationToken = default);
 }

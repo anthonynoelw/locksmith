@@ -1,6 +1,8 @@
 namespace Infrastructure.Repositories;
 
 using Application.Interfaces.Repositories;
+using Domain.Enums;
+using Domain.Exceptions;
 using Domain.Models;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +54,41 @@ public sealed class ApiKeyStatusRepository(AppDbContext db) : IApiKeyStatusRepos
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task AddAsync(ApiKeyStatus status, CancellationToken ct = default)
     {
+        db.AttachIfDetached(status.ApiKey);
         db.ApiKeyStatuses.Add(status);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Soft-deletes the current (most recent, non-deleted) status for an API Key.
+    /// </summary>
+    /// <param name="apiKeyId">The API Key identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="NotFoundException">
+    /// Thrown when no current status exists for the given <paramref name="apiKeyId"/>.
+    /// </exception>
+    /// <exception cref="ConflictException">
+    /// Thrown when the current status is <see cref="ApiKeyStatusEnum.Revoked"/> or
+    /// <see cref="ApiKeyStatusEnum.Expired"/> and therefore cannot be changed.
+    /// </exception>
+    public async Task SoftDeleteAsync(
+        Guid apiKeyId,
+        CancellationToken ct = default)
+    {
+        ApiKeyStatus status = await db.ApiKeyStatuses
+            .Where(s => s.ApiKeyId == apiKeyId)
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync(s => s.DeletedAt == null, ct)
+            ?? throw new NotFoundException($"Api Key Status with ID {apiKeyId} was not found");
+
+        if (status.Status is ApiKeyStatusEnum.Revoked or ApiKeyStatusEnum.Expired)
+        {
+            throw new ConflictException($"The current Status: {status.Status} of the ApiKey cannot be changed");
+        }
+
+        status.DeletedAt = DateTime.UtcNow;
+
         await db.SaveChangesAsync(ct);
     }
 }

@@ -24,7 +24,7 @@ public sealed class CreateApiKeyService : ICreateApiKeyService
     }
 
     /// <inheritdoc/>
-    public async Task<CreateApiKeyResult> Execute(CreateApiKeyCommand command, CancellationToken cancellationToken = default)
+    public async Task<CreateApiKeyResult> ExecuteAsync(CreateApiKeyCommand command, CancellationToken cancellationToken = default)
     {
         if (command.ExpiresAt <= DateTime.UtcNow)
         {

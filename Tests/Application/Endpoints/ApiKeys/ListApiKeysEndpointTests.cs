@@ -85,24 +85,8 @@ public sealed class ListApiKeysEndpointTests(ApplicationFixture fixture) : Appli
     [Fact]
     public async Task GET_ListApiKeys_IncludesMetadataForCreatedKey()
     {
-        var createRequest = new { actions = new[] { 0, 1 } }; // Read, Write
-        StringContent createContent = new StringContent(
-            JsonSerializer.Serialize(createRequest, _jsonOptions),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var createMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = createContent,
-        };
-        createMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage createResponse = await Client.SendAsync(createMessage);
-        string createBody = await createResponse.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(createBody, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        Guid createdKeyId = createdKey!.Id;
+        CreateApiKeyResponse createdKey = await CreateApiKeyAsync([0, 1]); // Read, Write
+        Guid createdKeyId = createdKey.Id;
 
         // Now list and verify the created key is in the list
         using var listMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys");

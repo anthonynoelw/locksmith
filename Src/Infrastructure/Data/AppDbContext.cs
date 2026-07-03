@@ -61,6 +61,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, string? databa
     }
 
     /// <summary>
+    /// Attaches <paramref name="entity"/> in the <see cref="EntityState.Unchanged"/> state if it is not
+    /// already tracked by this context.
+    /// </summary>
+    /// <remarks>
+    /// Use this before adding a new entity whose navigation properties were loaded via a no-tracking
+    /// query (e.g. resolved through an unrelated lookup). Without it, EF Core treats the detached
+    /// navigation as a new entity to insert alongside the one being added, causing a primary key
+    /// violation on save.
+    /// <para>
+    /// <see cref="Attach(object)"/> marks the entire reachable object graph as
+    /// <see cref="EntityState.Unchanged"/>, not just <paramref name="entity"/> itself. Only call this
+    /// with an entity whose own navigation collections (if any) are empty or already correctly tracked —
+    /// attaching an entity with a populated collection of entities meant to be newly inserted in the
+    /// same <see cref="SaveChangesAsync(CancellationToken)"/> call would silently mark them unchanged too.
+    /// </para>
+    /// </remarks>
+    /// <param name="entity">The entity to attach if it is currently detached.</param>
+    public void AttachIfDetached(object entity)
+    {
+        if (Entry(entity).State == EntityState.Detached)
+        {
+            Attach(entity);
+        }
+    }
+
+    /// <summary>
     /// Configures the model for the database context.
     /// </summary>
     /// <param name="modelBuilder">The model builder.</param>

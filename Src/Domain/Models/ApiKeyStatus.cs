@@ -10,7 +10,7 @@ public class ApiKeyStatus : IAppendOnlyTable
     /// <summary>
     /// Gets the unique identifier for the API key status.
     /// </summary>
-    public required Guid Id { get; init; } = Guid.NewGuid();
+    public Guid Id { get; init; } = Guid.NewGuid();
 
     /// <summary>
     /// Gets the API key for the API key status.
@@ -25,12 +25,12 @@ public class ApiKeyStatus : IAppendOnlyTable
     /// <summary>
     /// Gets the date and time the API key status was created.
     /// </summary>
-    public required DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 
     /// <summary>
     /// Gets the identity of the caller who created the API key status.
     /// </summary>
-    public required string CreatedBy { get; init; }
+    public string CreatedBy { get; init; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the date and time the API key status was soft-deleted.

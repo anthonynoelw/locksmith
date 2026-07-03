@@ -12,7 +12,7 @@ public interface IListApiKeysService
     /// <param name="offset">Number of keys to skip (default 0).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Paginated list of API keys.</returns>
-    public Task<ListApiKeysResult> Execute(int limit, int offset, CancellationToken cancellationToken = default);
+    public Task<ListApiKeysResult> ExecuteAsync(int limit, int offset, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Result of listing API keys.</summary>

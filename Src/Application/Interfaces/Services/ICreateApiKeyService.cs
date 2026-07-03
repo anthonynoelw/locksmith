@@ -16,5 +16,5 @@ public interface ICreateApiKeyService
     /// <param name="command">The creation parameters.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The newly created API key ID, plaintext secret, and idempotency key.</returns>
-    public Task<CreateApiKeyResult> Execute(CreateApiKeyCommand command, CancellationToken cancellationToken = default);
+    public Task<CreateApiKeyResult> ExecuteAsync(CreateApiKeyCommand command, CancellationToken cancellationToken = default);
 }
