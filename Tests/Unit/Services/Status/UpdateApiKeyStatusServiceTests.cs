@@ -12,8 +12,8 @@ using Moq;
 
 public sealed class UpdateApiKeyStatusServiceTests
 {
-    private const string IdempotencyKeyPlaintext = "plaintext-idempotency-key";
-    private const string IdempotencyKeyHash = "hashed-idempotency-key";
+    private const string IDEMPOTENCY_KEY_PLAINTEXT = "plaintext-idempotency-key";
+    private const string IDEMPOTENCY_KEY_HASH = "hashed-idempotency-key";
 
     private readonly Mock<IUnitOfWork> _unitOfWork;
     private readonly Mock<IApiKeyStatusRepository> _statusRepo;
@@ -31,7 +31,7 @@ public sealed class UpdateApiKeyStatusServiceTests
         _unitOfWork.Setup(u => u.IdempotencyKeys).Returns(_idempotencyKeyRepo.Object);
 
         _cryptoService = new Mock<ICryptoService>();
-        _cryptoService.Setup(c => c.HashForLookup(IdempotencyKeyPlaintext)).Returns(IdempotencyKeyHash);
+        _cryptoService.Setup(c => c.HashForLookup(IDEMPOTENCY_KEY_PLAINTEXT)).Returns(IDEMPOTENCY_KEY_HASH);
 
         _sut = new UpdateApiKeyStatusService(_unitOfWork.Object, _cryptoService.Object);
     }
@@ -42,7 +42,7 @@ public sealed class UpdateApiKeyStatusServiceTests
         Guid apiKeyId = Guid.NewGuid();
         SetUpIdempotencyKey(apiKeyId);
 
-        await _sut.ExecuteAsync(IdempotencyKeyPlaintext, ApiKeyStatusEnum.Active);
+        await _sut.ExecuteAsync(IDEMPOTENCY_KEY_PLAINTEXT, ApiKeyStatusEnum.Active);
 
         _statusRepo.Verify(r => r.SoftDeleteAsync(apiKeyId, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -53,7 +53,7 @@ public sealed class UpdateApiKeyStatusServiceTests
         Guid apiKeyId = Guid.NewGuid();
         SetUpIdempotencyKey(apiKeyId);
 
-        await _sut.ExecuteAsync(IdempotencyKeyPlaintext, ApiKeyStatusEnum.Active);
+        await _sut.ExecuteAsync(IDEMPOTENCY_KEY_PLAINTEXT, ApiKeyStatusEnum.Active);
 
         _statusRepo.Verify(
             r => r.AddAsync(
@@ -66,10 +66,10 @@ public sealed class UpdateApiKeyStatusServiceTests
     public async Task ExecuteAsync_WhenIdempotencyKeyInvalid_ThrowsNotFoundException()
     {
         _idempotencyKeyRepo
-            .Setup(r => r.GetByHashAsync(IdempotencyKeyHash, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByHashAsync(IDEMPOTENCY_KEY_HASH, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IdempotencyKey?)null);
 
-        Func<Task> act = () => _sut.ExecuteAsync(IdempotencyKeyPlaintext, ApiKeyStatusEnum.Active);
+        Func<Task> act = () => _sut.ExecuteAsync(IDEMPOTENCY_KEY_PLAINTEXT, ApiKeyStatusEnum.Active);
 
         await act.Should().ThrowAsync<NotFoundException>();
     }
@@ -78,10 +78,10 @@ public sealed class UpdateApiKeyStatusServiceTests
     public async Task ExecuteAsync_WhenIdempotencyKeyInvalid_DoesNotAddNewStatus()
     {
         _idempotencyKeyRepo
-            .Setup(r => r.GetByHashAsync(IdempotencyKeyHash, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByHashAsync(IDEMPOTENCY_KEY_HASH, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IdempotencyKey?)null);
 
-        Func<Task> act = () => _sut.ExecuteAsync(IdempotencyKeyPlaintext, ApiKeyStatusEnum.Active);
+        Func<Task> act = () => _sut.ExecuteAsync(IDEMPOTENCY_KEY_PLAINTEXT, ApiKeyStatusEnum.Active);
 
         await act.Should().ThrowAsync<NotFoundException>();
         _statusRepo.Verify(r => r.AddAsync(It.IsAny<ApiKeyStatus>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -96,7 +96,7 @@ public sealed class UpdateApiKeyStatusServiceTests
             .Setup(r => r.SoftDeleteAsync(apiKeyId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ConflictException("The current Status: Revoked of the ApiKey cannot be changed"));
 
-        Func<Task> act = () => _sut.ExecuteAsync(IdempotencyKeyPlaintext, ApiKeyStatusEnum.Active);
+        Func<Task> act = () => _sut.ExecuteAsync(IDEMPOTENCY_KEY_PLAINTEXT, ApiKeyStatusEnum.Active);
 
         await act.Should().ThrowAsync<ConflictException>();
         _statusRepo.Verify(r => r.AddAsync(It.IsAny<ApiKeyStatus>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -104,23 +104,13 @@ public sealed class UpdateApiKeyStatusServiceTests
 
     private void SetUpIdempotencyKey(Guid apiKeyId)
     {
-        var apiKey = new ApiKey
-        {
-            Id = apiKeyId,
-            Secret = "encrypted",
-            SecretHash = "hash",
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = "caller",
-            ExpiresAt = DateTime.UtcNow.AddDays(30),
-            Statuses = new List<ApiKeyStatus>(),
-            Actions = new List<ApiKeyAction>(),
-        };
+        ApiKey apiKey = StatusTestData.BuildApiKey(apiKeyId);
 
         var idempotencyKeyEntity = new IdempotencyKey
         {
             Id = Guid.NewGuid(),
             ApiKeyId = apiKeyId,
-            IdempotencyKeyHash = IdempotencyKeyHash,
+            IdempotencyKeyHash = IDEMPOTENCY_KEY_HASH,
             Salt = "salt",
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "caller",
@@ -128,7 +118,7 @@ public sealed class UpdateApiKeyStatusServiceTests
         };
 
         _idempotencyKeyRepo
-            .Setup(r => r.GetByHashAsync(IdempotencyKeyHash, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByHashAsync(IDEMPOTENCY_KEY_HASH, It.IsAny<CancellationToken>()))
             .ReturnsAsync(idempotencyKeyEntity);
     }
 }

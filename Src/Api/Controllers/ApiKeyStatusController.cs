@@ -5,6 +5,8 @@ using System.Linq;
 using Api.Requests;
 using Api.Responses;
 using Application.Interfaces.Services.Status;
+using Domain.Enums;
+using Domain.Exceptions;
 using Domain.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +26,9 @@ public sealed class ApiKeyStatusController : Controller
     /// Initializes a new instance of the <see cref="ApiKeyStatusController"/> class.
     /// </summary>
     /// <param name="getApiKeyStatusService">The service to get the current status of an API key by its ID.</param>
-    /// <param name="getApiKeyStatusHistoryService">The service to get the status history of an API key by its ID.</param>
+    /// <param name="getApiKeyStatusHistoryService">
+    /// The service to get the status history of an API key by its ID.
+    /// </param>
     /// <param name="updateApiKeyStatusService">The service to update an API key Status by its IdempotencyKey.</param>
     public ApiKeyStatusController(
         IGetApiKeyStatusService getApiKeyStatusService,
@@ -80,9 +84,14 @@ public sealed class ApiKeyStatusController : Controller
     [Authorize]
     public async Task<IActionResult> Update([FromBody] UpdateApiKeyStatusRequest request, CancellationToken ct)
     {
-        // Status is [Required] and validated by ApiBehaviorOptions before this action runs,
-        // so a null value here can only mean model validation was bypassed.
-        await _updateApiKeyStatusService.ExecuteAsync(request.IdempotencyKey, request.Status!.Value, ct);
+        // Status is [Required] and validated by ApiBehaviorOptions before this action runs, so this can
+        // only throw if model validation was bypassed. ValidationException keeps that failure mode
+        // mapped to 422 via GlobalExceptionHandler instead of a generic 500.
+        ApiKeyStatusEnum status = request.Status ?? throw new ValidationException(
+            "Validation failed.",
+            new Dictionary<string, string[]> { { "Status", new[] { "Status is required." } } });
+
+        await _updateApiKeyStatusService.ExecuteAsync(request.IdempotencyKey, status, ct);
         return Ok();
     }
 }

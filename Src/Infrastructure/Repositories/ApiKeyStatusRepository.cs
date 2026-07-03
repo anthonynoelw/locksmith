@@ -54,14 +54,7 @@ public sealed class ApiKeyStatusRepository(AppDbContext db) : IApiKeyStatusRepos
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task AddAsync(ApiKeyStatus status, CancellationToken ct = default)
     {
-        // The status's ApiKey navigation may come from a no-tracking query (e.g. resolved via
-        // an idempotency key lookup). Without this, EF Core treats the detached ApiKey as a new
-        // entity to insert alongside the status, causing a primary key violation on save.
-        if (db.Entry(status.ApiKey).State == EntityState.Detached)
-        {
-            db.Attach(status.ApiKey);
-        }
-
+        db.AttachIfDetached(status.ApiKey);
         db.ApiKeyStatuses.Add(status);
         await db.SaveChangesAsync(ct);
     }
@@ -72,8 +65,13 @@ public sealed class ApiKeyStatusRepository(AppDbContext db) : IApiKeyStatusRepos
     /// <param name="apiKeyId">The API Key identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="NotFoundException">Thrown when no current status exists for the given <paramref name="apiKeyId"/>.</exception>
-    /// <exception cref="ConflictException">Thrown when the current status is <see cref="ApiKeyStatusEnum.Revoked"/> or <see cref="ApiKeyStatusEnum.Expired"/> and therefore cannot be changed.</exception>
+    /// <exception cref="NotFoundException">
+    /// Thrown when no current status exists for the given <paramref name="apiKeyId"/>.
+    /// </exception>
+    /// <exception cref="ConflictException">
+    /// Thrown when the current status is <see cref="ApiKeyStatusEnum.Revoked"/> or
+    /// <see cref="ApiKeyStatusEnum.Expired"/> and therefore cannot be changed.
+    /// </exception>
     public async Task SoftDeleteAsync(
         Guid apiKeyId,
         CancellationToken ct = default)
@@ -81,7 +79,8 @@ public sealed class ApiKeyStatusRepository(AppDbContext db) : IApiKeyStatusRepos
         ApiKeyStatus status = await db.ApiKeyStatuses
             .Where(s => s.ApiKeyId == apiKeyId)
             .OrderByDescending(s => s.CreatedAt)
-            .FirstOrDefaultAsync(s => s.DeletedAt == null, ct) ?? throw new NotFoundException($"Api Key Status with ID {apiKeyId} was not found");
+            .FirstOrDefaultAsync(s => s.DeletedAt == null, ct)
+            ?? throw new NotFoundException($"Api Key Status with ID {apiKeyId} was not found");
 
         if (status.Status is ApiKeyStatusEnum.Revoked or ApiKeyStatusEnum.Expired)
         {

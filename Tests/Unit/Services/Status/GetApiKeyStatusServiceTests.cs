@@ -29,7 +29,7 @@ public sealed class GetApiKeyStatusServiceTests
     public async Task ExecuteAsync_WhenStatusExists_ReturnsStatus()
     {
         Guid apiKeyId = Guid.NewGuid();
-        ApiKeyStatus status = BuildStatus(apiKeyId, ApiKeyStatusEnum.Active);
+        ApiKeyStatus status = StatusTestData.BuildStatus(apiKeyId, ApiKeyStatusEnum.Active);
         _statusRepo
             .Setup(r => r.GetCurrentStatusAsync(apiKeyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(status);
@@ -51,23 +51,4 @@ public sealed class GetApiKeyStatusServiceTests
 
         await act.Should().ThrowAsync<NotFoundException>();
     }
-
-    private static ApiKeyStatus BuildStatus(Guid apiKeyId, ApiKeyStatusEnum status) =>
-        new ()
-        {
-            Id = Guid.NewGuid(),
-            ApiKeyId = apiKeyId,
-            Status = status,
-            ApiKey = new ApiKey
-            {
-                Id = apiKeyId,
-                Secret = "encrypted",
-                SecretHash = "hash",
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = "caller",
-                ExpiresAt = DateTime.UtcNow.AddDays(30),
-                Statuses = new List<ApiKeyStatus>(),
-                Actions = new List<ApiKeyAction>(),
-            },
-        };
 }

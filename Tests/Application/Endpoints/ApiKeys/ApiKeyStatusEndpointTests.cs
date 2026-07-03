@@ -60,29 +60,37 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/status/{createdKey.Id}/history");
+        using var requestMessage = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v1/api-keys/status/{createdKey.Id}/history");
         requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
         string body = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        List<ApiKeyStatusHistoryResponse>? history = JsonSerializer.Deserialize<List<ApiKeyStatusHistoryResponse>>(body, _jsonOptions);
-        history.Should().NotBeNull();
+        List<ApiKeyStatusHistoryResponse>? history = JsonSerializer.Deserialize<List<ApiKeyStatusHistoryResponse>>(
+            body,
+            _jsonOptions);
+        history.Should().HaveCount(1);
         history!.Should().ContainSingle(s => s.Status == "Inactive");
     }
 
     [Fact]
     public async Task GET_History_WithUnknownId_Returns200OkWithEmptyList()
     {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/status/{Guid.NewGuid()}/history");
+        using var requestMessage = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v1/api-keys/status/{Guid.NewGuid()}/history");
         requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
         string body = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        List<ApiKeyStatusHistoryResponse>? history = JsonSerializer.Deserialize<List<ApiKeyStatusHistoryResponse>>(body, _jsonOptions);
+        List<ApiKeyStatusHistoryResponse>? history = JsonSerializer.Deserialize<List<ApiKeyStatusHistoryResponse>>(
+            body,
+            _jsonOptions);
         history.Should().BeEmpty();
     }
 
@@ -115,17 +123,21 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     [Fact]
     public async Task PATCH_Update_WithMissingStatus_Returns422UnprocessableEntity()
     {
-        CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
-        var updateRequest = new { idempotencyKey = createdKey.IdempotencyKey };
-        using var content = new StringContent(JsonSerializer.Serialize(updateRequest, _jsonOptions), Encoding.UTF8, "application/json");
+        // Status validation fails before the idempotency key is ever looked up, so no key needs to exist.
+        var updateRequest = new { idempotencyKey = "unused-idempotency-key" };
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/api-keys/status/update")
-        {
-            Content = content,
-        };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+        HttpResponseMessage response = await SendUpdateRawAsync(updateRequest);
 
-        HttpResponseMessage response = await Client.SendAsync(requestMessage);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task PATCH_Update_WithNullStatus_Returns422UnprocessableEntity()
+    {
+        // Status validation fails before the idempotency key is ever looked up, so no key needs to exist.
+        var updateRequest = new { idempotencyKey = "unused-idempotency-key", status = (ApiKeyStatusEnum?)null };
+
+        HttpResponseMessage response = await SendUpdateRawAsync(updateRequest);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
@@ -134,36 +146,23 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     public async Task PATCH_Update_WhenCurrentStatusIsRevoked_Returns409Conflict()
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
-        (await SendUpdateAsync(createdKey.IdempotencyKey, ApiKeyStatusEnum.Revoked)).StatusCode.Should().Be(HttpStatusCode.OK);
+        HttpResponseMessage revokeResponse = await SendUpdateAsync(createdKey.IdempotencyKey, ApiKeyStatusEnum.Revoked);
+        revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         HttpResponseMessage response = await SendUpdateAsync(createdKey.IdempotencyKey, ApiKeyStatusEnum.Active);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
-    private async Task<CreateApiKeyResponse> CreateApiKeyAsync()
+    private Task<HttpResponseMessage> SendUpdateAsync(string idempotencyKey, ApiKeyStatusEnum status) =>
+        SendUpdateRawAsync(new { idempotencyKey, status = (int)status });
+
+    private async Task<HttpResponseMessage> SendUpdateRawAsync(object updateRequest)
     {
-        object request = new { actions = new[] { 0 } }; // Read
-        using var content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), Encoding.UTF8, "application/json");
-
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = content,
-        };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
-
-        HttpResponseMessage response = await Client.SendAsync(requestMessage);
-        string body = await response.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(body, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        return createdKey!;
-    }
-
-    private async Task<HttpResponseMessage> SendUpdateAsync(string idempotencyKey, ApiKeyStatusEnum status)
-    {
-        var updateRequest = new { idempotencyKey, status = (int)status };
-        using var content = new StringContent(JsonSerializer.Serialize(updateRequest, _jsonOptions), Encoding.UTF8, "application/json");
+        using var content = new StringContent(
+            JsonSerializer.Serialize(updateRequest, _jsonOptions),
+            Encoding.UTF8,
+            "application/json");
 
         using var requestMessage = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/api-keys/status/update")
         {

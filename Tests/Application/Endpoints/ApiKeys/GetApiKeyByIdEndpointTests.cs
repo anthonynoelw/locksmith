@@ -18,25 +18,8 @@ public sealed class GetApiKeyByIdEndpointTests(ApplicationFixture fixture) : App
     [Fact]
     public async Task GET_GetApiKeyById_WithValidId_Returns200Ok()
     {
-        // First, create a key
-        var createRequest = new { actions = new[] { 0 } }; // Read
-        StringContent createContent = new StringContent(
-            JsonSerializer.Serialize(createRequest, _jsonOptions),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var createMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = createContent,
-        };
-        createMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage createResponse = await Client.SendAsync(createMessage);
-        string createBody = await createResponse.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(createBody, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        Guid keyId = createdKey!.Id;
+        CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
+        Guid keyId = createdKey.Id;
 
         // Now get the key by ID
         using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{keyId}");
@@ -50,25 +33,8 @@ public sealed class GetApiKeyByIdEndpointTests(ApplicationFixture fixture) : App
     [Fact]
     public async Task GET_GetApiKeyById_ReturnsMetadataResponse()
     {
-        // Create a key
-        var createRequest = new { actions = new[] { 1, 2 } }; // Write, Delete
-        StringContent createContent = new StringContent(
-            JsonSerializer.Serialize(createRequest, _jsonOptions),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var createMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = createContent,
-        };
-        createMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage createResponse = await Client.SendAsync(createMessage);
-        string createBody = await createResponse.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(createBody, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        Guid keyId = createdKey!.Id;
+        CreateApiKeyResponse createdKey = await CreateApiKeyAsync([1, 2]); // Write, Delete
+        Guid keyId = createdKey.Id;
 
         // Get the key
         using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{keyId}");

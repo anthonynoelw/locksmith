@@ -18,26 +18,8 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
     [Fact]
     public async Task POST_ValidateApiKeySecret_WithValidSecret_Returns200Ok()
     {
-        // Create a key
-        var createRequest = new { actions = new[] { 0 } }; // Read
-        StringContent createContent = new StringContent(
-            JsonSerializer.Serialize(createRequest, _jsonOptions),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var createMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = createContent,
-        };
-        createMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage createResponse = await Client.SendAsync(createMessage);
-        string createBody = await createResponse.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(createBody, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        string plainSecret = createdKey!.Secret;
-        Guid keyId = createdKey.Id;
+        CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
+        string plainSecret = createdKey.Secret;
 
         // Validate the secret
         var validateRequest = new { secret = plainSecret };
@@ -60,25 +42,8 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
     [Fact]
     public async Task POST_ValidateApiKeySecret_WhenKeyIsInactive_ReturnsIsValidFalse()
     {
-        // Create a key
-        var createRequest = new { actions = new[] { 0 } };
-        StringContent createContent = new StringContent(
-            JsonSerializer.Serialize(createRequest, _jsonOptions),
-            System.Text.Encoding.UTF8,
-            "application/json");
-
-        using var createMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
-        {
-            Content = createContent,
-        };
-        createMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage createResponse = await Client.SendAsync(createMessage);
-        string createBody = await createResponse.Content.ReadAsStringAsync();
-        CreateApiKeyResponse? createdKey = JsonSerializer.Deserialize<CreateApiKeyResponse>(createBody, _jsonOptions);
-
-        createdKey.Should().NotBeNull();
-        string plainSecret = createdKey!.Secret;
+        CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
+        string plainSecret = createdKey.Secret;
         Guid keyId = createdKey.Id;
 
         // Validate the secret
