@@ -4,6 +4,7 @@ using Application.Interfaces;
 using Application.Interfaces.Repositories;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
+using Microsoft.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Provides transaction and repository coordination for data access operations.
@@ -47,6 +48,23 @@ public sealed class UnitOfWork(AppDbContext dbContext) : IUnitOfWork
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="operation"/> inside a single database transaction, committing on
+    /// success and rolling back every repository write if it throws.
+    /// </summary>
+    /// <param name="operation">The operation performing one or more repository writes.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task ExecuteInTransactionAsync(
+        Func<Task> operation,
+        CancellationToken cancellationToken = default)
+    {
+        await using IDbContextTransaction transaction =
+            await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await operation();
+        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>

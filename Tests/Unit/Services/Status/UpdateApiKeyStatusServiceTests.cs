@@ -104,7 +104,7 @@ public sealed class UpdateApiKeyStatusServiceTests
 
     private void SetUpIdempotencyKey(Guid apiKeyId)
     {
-        ApiKey apiKey = StatusTestData.BuildApiKey(apiKeyId);
+        ApiKey apiKey = ApiKeyTestData.BuildApiKey(apiKeyId);
 
         var idempotencyKeyEntity = new IdempotencyKey
         {

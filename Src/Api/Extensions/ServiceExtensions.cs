@@ -7,8 +7,10 @@ using Api.Exceptions;
 using Api.OpenApi;
 using Api.Settings;
 using Application.Interfaces.Services;
+using Application.Interfaces.Services.Actions;
 using Application.Interfaces.Services.Status;
 using Application.Services;
+using Application.Services.Actions;
 using Application.Services.Status;
 using Application.Settings;
 using Domain;
@@ -106,6 +108,10 @@ internal static class ServiceExtensions
         builder.Services.AddScoped<IGetApiKeyStatusService, GetApiKeyStatusService>();
         builder.Services.AddScoped<IGetApiKeyStatusHistoryService, GetApiKeyStatusHistoryService>();
         builder.Services.AddScoped<IUpdateApiKeyStatusService, UpdateApiKeyStatusService>();
+        builder.Services.AddScoped<IListApiKeyActionsService, ListApiKeyActionsService>();
+        builder.Services.AddScoped<IReplaceApiKeyActionsService, ReplaceApiKeyActionsService>();
+        builder.Services.AddScoped<IGrantApiKeyActionService, GrantApiKeyActionService>();
+        builder.Services.AddScoped<IRevokeApiKeyActionService, RevokeApiKeyActionService>();
 
         return builder;
     }

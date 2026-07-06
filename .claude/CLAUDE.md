@@ -211,4 +211,8 @@ dotnet test
 
 Key items not yet implemented that new features will likely need:
 - OpenTelemetry traces + metrics
-- OpenApi 
+
+
+## Important 
+
+Concept And Decision Folders are not to be touched!
