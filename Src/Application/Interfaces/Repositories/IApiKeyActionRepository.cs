@@ -9,7 +9,7 @@ using Domain.Models;
 public interface IApiKeyActionRepository
 {
     /// <summary>
-    /// Gets all allowed actions for an API Key.
+    /// Gets all actions ever granted to an API Key, including soft-deleted (revoked) rows.
     /// </summary>
     /// <param name="apiKeyId">The API Key identifier.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -19,11 +19,24 @@ public interface IApiKeyActionRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// Gets the currently granted (non-revoked) actions of an API Key.
+    /// </summary>
+    /// <param name="apiKeyId">The API Key identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>List of active actions; empty if none exist.</returns>
+    public Task<IReadOnlyList<ApiKeyAction>> GetActiveByApiKeyIdAsync(
+        Guid apiKeyId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Adds a single action to an API Key.
     /// </summary>
     /// <param name="action">The action to add.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="Domain.Exceptions.ConflictException">
+    /// Thrown when the action is already actively granted to the API Key (concurrent grant).
+    /// </exception>
     public Task AddAsync(ApiKeyAction action, CancellationToken ct = default);
 
     /// <summary>

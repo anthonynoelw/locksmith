@@ -15,6 +15,13 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 public class AppDbContext(DbContextOptions<AppDbContext> options, string? databaseUser = null) : DbContext(options)
 {
     /// <summary>
+    /// Name of the partial unique index that guarantees at most one active (non-revoked) grant per
+    /// (ApiKeyId, Action) pair. Repositories match on this name to translate unique violations
+    /// raised by concurrent grants into domain conflicts.
+    /// </summary>
+    public const string ACTIVE_ACTION_UNIQUE_INDEX = "IX_ApiKeyActions_ApiKeyId_Action_Active";
+
+    /// <summary>
     /// Gets the database user name used for setting up constraints and permissions.
     /// </summary>
     public string DatabaseUser { get; } = databaseUser ?? "postgres";
@@ -22,22 +29,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, string? databa
     /// <summary>
     /// Gets or sets the API keys.
     /// </summary>
-    public DbSet<ApiKey> ApiKeys { get; set; }
+    public DbSet<ApiKey>? ApiKeys { get; set; }
 
     /// <summary>
     /// Gets or sets the API key statuses.
     /// </summary>
-    public DbSet<ApiKeyStatus> ApiKeyStatuses { get; set; }
+    public DbSet<ApiKeyStatus>? ApiKeyStatuses { get; set; }
 
     /// <summary>
     /// Gets or sets the API key actions.
     /// </summary>
-    public DbSet<ApiKeyAction> ApiKeyActions { get; set; }
+    public DbSet<ApiKeyAction>? ApiKeyActions { get; set; }
 
     /// <summary>
     /// Gets or sets the idempotency keys.
     /// </summary>
-    public DbSet<IdempotencyKey> IdempotencyKeys { get; set; }
+    public DbSet<IdempotencyKey>? IdempotencyKeys { get; set; }
 
     /// <summary>
     /// Validates that append-only entities are not being modified or deleted.
@@ -123,6 +130,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, string? databa
 
         modelBuilder.Entity<ApiKeyAction>()
             .HasIndex(e => e.ApiKeyId);
+
+        // At most one active grant per (ApiKeyId, Action): concurrent duplicate grants fail at the
+        // database instead of producing duplicate active rows that a single revoke cannot clear.
+        modelBuilder.Entity<ApiKeyAction>()
+            .HasIndex(e => new { e.ApiKeyId, e.Action })
+            .HasDatabaseName(ACTIVE_ACTION_UNIQUE_INDEX)
+            .HasFilter("\"DeletedAt\" IS NULL")
+            .IsUnique();
     }
 
     private void ValidateAppendOnlyConstraints()

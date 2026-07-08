@@ -37,4 +37,13 @@ public interface IUnitOfWork : IAsyncDisposable
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The number of state entries written to the database.</returns>
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="operation"/> inside a single database transaction, committing on
+    /// success and rolling back every repository write if it throws.
+    /// </summary>
+    /// <param name="operation">The operation performing one or more repository writes.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task ExecuteInTransactionAsync(Func<Task> operation, CancellationToken cancellationToken = default);
 }

@@ -106,18 +106,20 @@ public sealed class ApiKeyRepository(AppDbContext db) : IApiKeyRepository
 
         if (statuses.Count > 0 || actions.Count > 0)
         {
+            // The entities are tracked, so setting DeletedAt is enough. UpdateRange() would mark
+            // every property as modified, which the append-only guard in AppDbContext.SaveChanges
+            // rejects.
+            DateTime now = DateTime.UtcNow;
             foreach (ApiKeyStatus status in statuses)
             {
-                status.DeletedAt = DateTime.UtcNow;
+                status.DeletedAt = now;
             }
 
             foreach (ApiKeyAction action in actions)
             {
-                action.DeletedAt = DateTime.UtcNow;
+                action.DeletedAt = now;
             }
 
-            db.ApiKeyStatuses.UpdateRange(statuses);
-            db.ApiKeyActions.UpdateRange(actions);
             await db.SaveChangesAsync(ct);
         }
     }

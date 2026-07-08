@@ -1,4 +1,5 @@
 namespace Application.Interfaces.Services.Status;
+
 using Domain.Models;
 
 /// <summary>

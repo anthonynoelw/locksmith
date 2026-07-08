@@ -2,14 +2,13 @@ namespace Api.Controllers;
 
 using Api.Requests;
 using Api.Responses;
-using Api.Settings;
 using Application.Commands;
 using Application.Interfaces.Services;
+using Domain;
 using Domain.Enums;
 using Domain.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 
 /// <summary>Manages API key lifecycle operations.</summary>
 [ApiController]
@@ -21,7 +20,6 @@ public sealed class ApiKeyController : Controller
     private readonly IGetApiKeyByIdService _getApiKeyByIdService;
     private readonly IValidateApiKeySecretService _validateApiKeySecretService;
     private readonly IRetrieveSecretService _retrieveSecretService;
-    private readonly ApiSettings _apiSettings;
 
     /// <summary>Initializes a new instance of the <see cref="ApiKeyController"/> class.</summary>
     /// <param name="createApiKeyService">Service that creates new API keys.</param>
@@ -29,21 +27,18 @@ public sealed class ApiKeyController : Controller
     /// <param name="getApiKeyByIdService">Service that retrieves an API key by its ID.</param>
     /// <param name="validateApiKeySecretService">Service that validates an API key secret.</param>
     /// <param name="retrieveSecretService">Service that retrieves and decrypts an API key secret.</param>
-    /// <param name="apiSettings">API-level settings providing the caller identity.</param>
     public ApiKeyController(
         ICreateApiKeyService createApiKeyService,
         IListApiKeysService listApiKeysService,
         IGetApiKeyByIdService getApiKeyByIdService,
         IValidateApiKeySecretService validateApiKeySecretService,
-        IRetrieveSecretService retrieveSecretService,
-        IOptions<ApiSettings> apiSettings)
+        IRetrieveSecretService retrieveSecretService)
     {
         _createApiKeyService = createApiKeyService;
         _listApiKeysService = listApiKeysService;
         _getApiKeyByIdService = getApiKeyByIdService;
         _validateApiKeySecretService = validateApiKeySecretService;
         _retrieveSecretService = retrieveSecretService;
-        _apiSettings = apiSettings.Value;
     }
 
     /// <summary>Creates a new API key.</summary>
@@ -60,9 +55,11 @@ public sealed class ApiKeyController : Controller
         [FromBody] CreateApiKeyRequest request,
         CancellationToken cancellationToken)
     {
+        // CreatedBy is persisted and echoed back in metadata responses, so it must never carry the
+        // bearer token itself — a constant caller identity is recorded instead.
         CreateApiKeyResult result = await _createApiKeyService.ExecuteAsync(
             new CreateApiKeyCommand(
-                _apiSettings.BearerToken,
+                WellKnown.CallerIdentities.API_CLIENT,
                 request.ExpiresAt,
                 request.Actions),
             cancellationToken);

@@ -1,4 +1,4 @@
-﻿namespace Infrastructure.Migrations;
+namespace Infrastructure.Migrations;
 
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;

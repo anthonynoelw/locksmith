@@ -23,7 +23,7 @@ Core functionality and security-critical items required before Locksmith can be 
 
 - [x] `ApiKeyStatusEnum` — `Inactive`, `Active`, `Revoked`, `Expired`
 - [x] `ApiKeyActionEnum` — `Read`, `Write`, `Delete`, `Execute`
-- [ ] State transition guard — only allow valid transitions (`Inactive → Active`, `Active → Inactive`, `Active/Inactive → Revoked`); throw `ConflictException` on invalid transitions
+- [x] State transition guard — implemented as a terminal-state guard in `ApiKeyStatusRepository.SoftDeleteAsync`: throws `ConflictException` when the current status is `Revoked` or `Expired` (blocks further changes rather than validating the full `Inactive → Active` / `Active → Inactive` / `Active|Inactive → Revoked` transition matrix)
 
 ### Cryptography
 
@@ -53,18 +53,18 @@ Core functionality and security-critical items required before Locksmith can be 
 - [x] `CreateApiKey` service — generate idempotency key and API key secret, hash secret for lookup, encrypt secret, persist ApiKey with SecretHash and IdempotencyKey to separate table, return raw key once; validates expiry date
 - [x] `GetApiKey` service — implemented as `GetApiKeyByIdService` (single) and `ListApiKeysService` (paginated); both return metadata only, no raw key
 - [x] `GetApiKeySecret` service — implemented as `RetrieveSecretService` (hash/compare idempotency key, decrypt and return raw key) plus `ValidateApiKeySecretService` (hash/compare secret, return validity + status)
-- [ ] `PatchApiKeyStatus` service — validate state transition, append status row
+- [x] `PatchApiKeyStatus` service — implemented as `UpdateApiKeyStatusService`; resolves the API key via idempotency-key hash lookup (not keyId), soft-deletes the current status (guarding `Revoked`/`Expired`), then appends the new status row
+- [x] `GetApiKeyStatus` service — implemented as `GetApiKeyStatusService` (current status by keyId) and `GetApiKeyStatusHistoryService` (full history by keyId); not in original scope
 - [ ] `RotateApiKey` service — generate new secret, re-encrypt, re-hash, append status row atomically
-- [ ] `RevokeApiKey` service — append `Revoked` status row; soft-delete semantics
-- [ ] `ListApiKeyActions` service — return active actions (soft-delete filter)
-- [ ] `ReplaceApiKeyActions` service — diff current vs. new set; soft-delete removed, insert added
-- [ ] `GrantApiKeyAction` service — insert single action; throw `ConflictException` if already granted (including soft-deleted)
-- [ ] `RevokeApiKeyAction` service — soft-delete single action; throw `NotFoundException` if not present
-- [ ] FluentValidation validators for all service operations
+- [X] `RevokeApiKey` service — append `Revoked` status row; soft-delete semantics - implemented as `UpdateApiKeyStatusService`;
+- [x] `ListApiKeyActions` service — return active actions (soft-delete filter)
+- [x] `ReplaceApiKeyActions` service — diff current vs. new set; soft-delete removed, insert added
+- [x] `GrantApiKeyAction` service — insert single action; throws `ConflictException` only if there is a currently *active* grant — a previously revoked (soft-deleted) action can be re-granted, matching how status tracks current state as the latest non-deleted row
+- [x] `RevokeApiKeyAction` service — soft-delete single action; throw `NotFoundException` if not present
 
 ### Idempotency
 
-- [ ] `Idempotency-Key` header extraction — read from request on idempotent operations (POST)
+- [x]! Deprecated(The Idempotency Key will be received via the request body): `Idempotency-Key` header extraction — read from request on idempotent operations (POST) 
 - [ ] Deduplication cache — store response (status + body) keyed by `Idempotency-Key` hash; check before handler, return cached response if present; store result after successful execution
 - [ ] Cache expiry — TTL matched to key expiry window (30 days default); cleared on cache eviction or explicit purge
 - [ ] Conflict detection — if same `Idempotency-Key` used with different request body, return `409 Conflict` with error explaining mismatch
@@ -79,16 +79,18 @@ Note: Routes use `/api/v{version}/api-keys` (plural) not `/api/v1/keys`
 - [x] `GET /api/v{version}/api-keys/{keyId}` — metadata only (no raw secret); `404` if not found
 - [x] `POST /api/v{version}/api-keys/validate` — validate a presented secret by hash, return `apiKeyId`/`isValid`/status; `404` if secret unknown (not in original scope)
 - [x] `POST /api/v{version}/api-keys/retrieve-secret` — decrypt and return raw key via idempotency-key lookup; `404` if idempotency key not found — implemented as `POST .../retrieve-secret` with the idempotency key in the body rather than the originally scoped `GET .../{keyId}/secret`
-- [ ] `PATCH /api/v{version}/api-keys/{keyId}` — activate or deactivate; `409` on invalid transition; `422` on bad status value; appends `ApiKeyStatus` row
+- [x] `GET /api/v{version}/api-keys/status/{id}` — current status metadata by keyId; `404` if no status exists (not in original scope)
+- [x] `GET /api/v{version}/api-keys/status/{id}/history` — full status history by keyId, including soft-deleted entries; empty list if none (not in original scope)
+- [x] `PATCH /api/v{version}/api-keys/status/update` — activate/deactivate/revoke; `409` if current status is `Revoked`/`Expired`; `422` on missing/bad status value; appends `ApiKeyStatus` row — implemented as `PATCH .../status/update` with the idempotency key in the body rather than the originally scoped `PATCH .../{keyId}`
 - [ ] `POST /api/v{version}/api-keys/{keyId}/rotate` — new secret, old invalid immediately; `409` if `Revoked`/`Expired`; returns new plaintext secret once
 - [ ] `DELETE /api/v{version}/api-keys/{keyId}` — append `Revoked` status; `204` on success; `404` if not found
 
 ### API Endpoints — Action Management
 
-- [ ] `GET /api/v{version}/api-keys/{keyId}/actions` — list granted actions (soft-delete filter); `404` if key not found
-- [ ] `PUT /api/v{version}/api-keys/{keyId}/actions` — replace full action set; diff and soft-delete/insert; `404`/`422` as appropriate
-- [ ] `POST /api/v{version}/api-keys/{keyId}/actions/{action}` — grant single action; `409` if already granted; `422` on invalid action name
-- [ ] `DELETE /api/v{version}/api-keys/{keyId}/actions/{action}` — soft-delete single action; `404` if key or action not found
+- [x] `GET /api/v{version}/api-keys/{keyId}/actions` — list granted actions (soft-delete filter); `404` if key not found
+- [x] `PUT /api/v{version}/api-keys/{keyId}/actions` — replace full action set; diff and soft-delete/insert; `404`/`422` as appropriate; returns the resulting active set
+- [x] `POST /api/v{version}/api-keys/{keyId}/actions/{action}` — grant single action; `201` with the grant; `409` if already actively granted; `422` on invalid action name; `404` if key not found
+- [x] `DELETE /api/v{version}/api-keys/{keyId}/actions/{action}` — soft-delete single action; `204` on success; `404` if key or action not found
 
 ### Key Expiry (Agent)
 
@@ -108,7 +110,7 @@ Note: Routes use `/api/v{version}/api-keys` (plural) not `/api/v1/keys`
 Note: HTTP-level tests ended up living in `Tests/Application` (real middleware, real in-memory app via `ApplicationFixture`) rather than `Tests/Integration`, which is still an empty `WebApplicationFactory` scaffold with no tests. Items below labeled "Integration:" are satisfied by `Tests/Application` coverage unless noted otherwise.
 
 - [x] Unit: `GlobalExceptionHandler` — verify correct status codes and ProblemDetails shape for all domain exceptions (`Tests/Unit/Handler/GlobalExceptionHandlerTests.cs`)
-- [ ] Unit: domain state machine — verify all valid and invalid transitions (no state machine exists yet — blocked on `PatchApiKeyStatus`/`RotateApiKey`/`RevokeApiKey`)
+- [x] Unit: domain state machine — covered as the terminal-state guard in `ApiKeyStatusRepository.SoftDeleteAsync` (`Tests/Unit/Services/Status/UpdateApiKeyStatusServiceTests.cs`, `Tests/Unit/Services/Status/GetApiKeyStatusServiceTests.cs`, `GetApiKeyStatusHistoryServiceTests.cs`); no full transition-matrix validation yet — still blocked on `RotateApiKey`/`RevokeApiKey`
 - [x] Unit: `CryptoService` — round-trip Encrypt/Decrypt, hash consistency, key derivation with Argon2id
 - [x] Unit: `CreateApiKeyService` — validation (ExpiresAt), key generation, salt derivation, encryption (`Tests/Unit/Services/CreateApiKeyServiceTests.cs`)
 - [ ] Unit: FluentValidation validators for all commands — FluentValidation not yet added to the solution
@@ -116,10 +118,11 @@ Note: HTTP-level tests ended up living in `Tests/Application` (real middleware, 
 - [x] Integration: `POST /api/v{version}/api-keys` — `201` with raw key, idempotency key covered (`CreateApiKeyEndpointTests`); cache headers and idempotency-deduplication-on-retry not yet covered (no dedup cache exists)
 - [x] Integration: `GET /api/v{version}/api-keys/{keyId}` — metadata retrieval; `404` if not found (`GetApiKeyByIdEndpointTests`)
 - [x] Integration: `GET /api/v{version}/api-keys/{keyId}/secret` — covered as `POST .../retrieve-secret` idempotency-key lookup and decryption; `404` if idempotency key not found (`RetrieveSecretEndpointTests`)
-- [ ] Integration: all action management endpoints (happy path + error cases) — no action management endpoints exist yet
+- [x] Integration: status get/history/update endpoints — happy path, unknown-id `404`, missing/null-status `422`, and revoked-current-status `409` all covered (`ApiKeyStatusEndpointTests`)
+- [x] Integration: all action management endpoints (happy path + error cases) — list/grant/revoke/replace happy paths, unknown-key `404`, duplicate-grant `409`, invalid-action-name `422`, revoke-not-granted `404`, re-grant-after-revoke, and missing-token `401` all covered (`ApiKeyActionEndpointTests`)
 - [x] Integration: authentication middleware — missing token returns `401`, invalid token returns `401` (`CreateApiKeyAuthorizationTests`, `RetrievalEndpointAuthorizationTests`); valid-token-allows-request is implicitly covered by the happy-path tests on each endpoint
 - [ ] Integration: rate limiting — `429` after sliding-window limit exceeded — rate limiting not yet implemented
-- [ ] Application: full happy-path flow (issue → grant actions → activate → rotate → revoke) — blocked on action/status/rotate/revoke services
+- [ ] Application: full happy-path flow (issue → grant actions → activate → rotate → revoke) — status update now exists (`UpdateApiKeyStatusService`), still blocked on action/rotate/revoke services
 - [ ] Application: key expiry job transitions `Inactive`/`Active` keys to `Expired` — no Agent background job exists yet
 
 ---

@@ -88,7 +88,9 @@ public sealed class CreateApiKeyService : ICreateApiKeyService
             },
             cancellationToken);
 
-        foreach (ApiKeyActionEnum action in command.Actions)
+        // Distinct: the partial unique index on (ApiKeyId, Action) rejects duplicate active grants,
+        // so a request naming the same action twice must not attempt two inserts.
+        foreach (ApiKeyActionEnum action in command.Actions.Distinct())
         {
             await _unitOfWork.ApiKeyActions.AddAsync(
                 new ApiKeyAction

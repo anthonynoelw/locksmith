@@ -54,4 +54,14 @@ public static class WellKnown
         /// <summary>Bearer token authentication scheme for static pre-shared token validation.</summary>
         public const string BEARER = "Bearer";
     }
+
+    /// <summary>
+    /// Caller identities recorded in <c>CreatedBy</c> audit columns. Audit columns are persisted and
+    /// exposed in API responses, so they must never contain secrets such as the bearer token itself.
+    /// </summary>
+    public static class CallerIdentities
+    {
+        /// <summary>The identity recorded for requests authenticated with the pre-shared bearer token.</summary>
+        public const string API_CLIENT = "api-client";
+    }
 }
