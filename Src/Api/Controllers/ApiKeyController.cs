@@ -6,6 +6,7 @@ using Application.Commands;
 using Application.Interfaces.Services;
 using Domain;
 using Domain.Enums;
+using Domain.Exceptions;
 using Domain.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +21,8 @@ public sealed class ApiKeyController : Controller
     private readonly IGetApiKeyByIdService _getApiKeyByIdService;
     private readonly IValidateApiKeySecretService _validateApiKeySecretService;
     private readonly IRetrieveSecretService _retrieveSecretService;
+    private readonly IDeleteApiKeyService _deleteApiKeyService;
+    private readonly IRotateApiKeyService _rotateApiKeyService;
 
     /// <summary>Initializes a new instance of the <see cref="ApiKeyController"/> class.</summary>
     /// <param name="createApiKeyService">Service that creates new API keys.</param>
@@ -27,18 +30,24 @@ public sealed class ApiKeyController : Controller
     /// <param name="getApiKeyByIdService">Service that retrieves an API key by its ID.</param>
     /// <param name="validateApiKeySecretService">Service that validates an API key secret.</param>
     /// <param name="retrieveSecretService">Service that retrieves and decrypts an API key secret.</param>
+    /// <param name="deleteApiKeyService">Service that deletes an API key secret.</param>
+    /// <param name="rotateApiKeyService">Service that rotates an API key secret.</param>
     public ApiKeyController(
         ICreateApiKeyService createApiKeyService,
         IListApiKeysService listApiKeysService,
         IGetApiKeyByIdService getApiKeyByIdService,
         IValidateApiKeySecretService validateApiKeySecretService,
-        IRetrieveSecretService retrieveSecretService)
+        IRetrieveSecretService retrieveSecretService,
+        IDeleteApiKeyService deleteApiKeyService,
+        IRotateApiKeyService rotateApiKeyService)
     {
         _createApiKeyService = createApiKeyService;
         _listApiKeysService = listApiKeysService;
         _getApiKeyByIdService = getApiKeyByIdService;
         _validateApiKeySecretService = validateApiKeySecretService;
         _retrieveSecretService = retrieveSecretService;
+        _deleteApiKeyService = deleteApiKeyService;
+        _rotateApiKeyService = rotateApiKeyService;
     }
 
     /// <summary>Creates a new API key.</summary>
@@ -138,6 +147,41 @@ public sealed class ApiKeyController : Controller
             cancellationToken);
 
         return Ok(new ValidateApiKeySecretResponse(result.ApiKeyId, result.IsValid));
+    }
+
+    /// <summary>Rotates an API key: the current key is deleted and a new one is issued with the same granted actions.</summary>
+    /// <param name="request">The idempotency key that identifies the API key to rotate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>201 Created with the new key ID, plaintext secret, and idempotency key, or 404 Not Found if the idempotency key is invalid.</returns>
+    [HttpPost("rotate")]
+    [Authorize]
+    public async Task<IActionResult> Rotate(
+        [FromBody] UpdateApiKeyRequest request,
+        CancellationToken cancellationToken)
+    {
+        CreateApiKeyResult result = await _rotateApiKeyService.ExecuteAsync(request.IdempotencyKey, cancellationToken);
+
+        Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Created(
+            $"/api/v1/api-keys/{result.ApiKeyId}",
+            new CreateApiKeyResponse(result.ApiKeyId, result.PlaintextSecret, result.IdempotencyKey));
+    }
+
+    /// <summary>Deletes an API key identified by its idempotency key.</summary>
+    /// <param name="request">The idempotency key that identifies the API key to delete.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>204 No Content on success, or 404 Not Found if the idempotency key is invalid.</returns>
+    [HttpDelete]
+    [Authorize]
+    public async Task<IActionResult> Delete(
+        [FromBody] UpdateApiKeyRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _deleteApiKeyService.ExecuteAsync(request.IdempotencyKey, cancellationToken);
+
+        return NoContent();
     }
 
     private static ApiKeyMetadataResponse MapToMetadataResponse(ApiKey apiKey)
