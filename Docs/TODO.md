@@ -74,7 +74,6 @@ Core functionality and security-critical items required before Locksmith can be 
 Note: Routes use `/api/v{version}/api-keys` (plural) not `/api/v1/keys`
 
 - [x] `POST /api/v{version}/api-keys` — issue a key (calls `CreateApiKeyCommand`); `201` with raw key and idempotency key; `422` on validation failure; requires `[Authorize]`
-- [ ] Idempotency — check `Idempotency-Key` header on POST; return `409` on duplicate hash (cache response); omit header for subsequent retrieval
 - [x] `GET /api/v{version}/api-keys` — list with pagination (`limit`/`offset`); metadata only (not in original scope, added alongside single-key retrieval)
 - [x] `GET /api/v{version}/api-keys/{keyId}` — metadata only (no raw secret); `404` if not found
 - [x] `POST /api/v{version}/api-keys/validate` — validate a presented secret by hash, return `apiKeyId`/`isValid`/status; `404` if secret unknown (not in original scope)
@@ -82,8 +81,8 @@ Note: Routes use `/api/v{version}/api-keys` (plural) not `/api/v1/keys`
 - [x] `GET /api/v{version}/api-keys/status/{id}` — current status metadata by keyId; `404` if no status exists (not in original scope)
 - [x] `GET /api/v{version}/api-keys/status/{id}/history` — full status history by keyId, including soft-deleted entries; empty list if none (not in original scope)
 - [x] `PATCH /api/v{version}/api-keys/status/update` — activate/deactivate/revoke; `409` if current status is `Revoked`/`Expired`; `422` on missing/bad status value; appends `ApiKeyStatus` row — implemented as `PATCH .../status/update` with the idempotency key in the body rather than the originally scoped `PATCH .../{keyId}`
-- [ ] `POST /api/v{version}/api-keys/{keyId}/rotate` — new secret, old invalid immediately; `409` if `Revoked`/`Expired`; returns new plaintext secret once
-- [ ] `DELETE /api/v{version}/api-keys/{keyId}` — append `Revoked` status; `204` on success; `404` if not found
+- [x] `POST /api/v{version}/api-keys/{keyId}/rotate` — new secret, old invalid immediately; `409` if `Revoked`/`Expired`; returns new plaintext secret once
+- [x] `DELETE /api/v{version}/api-keys` — append `Revoked` status; `204` on success; `404` if not found
 
 ### API Endpoints — Action Management
 
@@ -113,7 +112,6 @@ Note: HTTP-level tests ended up living in `Tests/Application` (real middleware, 
 - [x] Unit: domain state machine — covered as the terminal-state guard in `ApiKeyStatusRepository.SoftDeleteAsync` (`Tests/Unit/Services/Status/UpdateApiKeyStatusServiceTests.cs`, `Tests/Unit/Services/Status/GetApiKeyStatusServiceTests.cs`, `GetApiKeyStatusHistoryServiceTests.cs`); no full transition-matrix validation yet — still blocked on `RotateApiKey`/`RevokeApiKey`
 - [x] Unit: `CryptoService` — round-trip Encrypt/Decrypt, hash consistency, key derivation with Argon2id
 - [x] Unit: `CreateApiKeyService` — validation (ExpiresAt), key generation, salt derivation, encryption (`Tests/Unit/Services/CreateApiKeyServiceTests.cs`)
-- [ ] Unit: FluentValidation validators for all commands — FluentValidation not yet added to the solution
 - [x] Unit: idempotency hash matching — verify SHA-256 lookup hash compares correctly (covered via `CryptoServiceTests.HashForLookup_*`)
 - [x] Integration: `POST /api/v{version}/api-keys` — `201` with raw key, idempotency key covered (`CreateApiKeyEndpointTests`); cache headers and idempotency-deduplication-on-retry not yet covered (no dedup cache exists)
 - [x] Integration: `GET /api/v{version}/api-keys/{keyId}` — metadata retrieval; `404` if not found (`GetApiKeyByIdEndpointTests`)

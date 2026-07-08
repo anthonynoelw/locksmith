@@ -105,6 +105,8 @@ internal static class ServiceExtensions
         builder.Services.AddScoped<IGetApiKeyByIdService, GetApiKeyByIdService>();
         builder.Services.AddScoped<IValidateApiKeySecretService, ValidateApiKeySecretService>();
         builder.Services.AddScoped<IRetrieveSecretService, RetrieveSecretService>();
+        builder.Services.AddScoped<IDeleteApiKeyService, DeleteApiKeyService>();
+        builder.Services.AddScoped<IRotateApiKeyService, RotateApiKeyService>();
         builder.Services.AddScoped<IGetApiKeyStatusService, GetApiKeyStatusService>();
         builder.Services.AddScoped<IGetApiKeyStatusHistoryService, GetApiKeyStatusHistoryService>();
         builder.Services.AddScoped<IUpdateApiKeyStatusService, UpdateApiKeyStatusService>();
