@@ -29,22 +29,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, string? databa
     /// <summary>
     /// Gets or sets the API keys.
     /// </summary>
-    public DbSet<ApiKey> ApiKeys { get; set; }
+    public DbSet<ApiKey>? ApiKeys { get; set; }
 
     /// <summary>
     /// Gets or sets the API key statuses.
     /// </summary>
-    public DbSet<ApiKeyStatus> ApiKeyStatuses { get; set; }
+    public DbSet<ApiKeyStatus>? ApiKeyStatuses { get; set; }
 
     /// <summary>
     /// Gets or sets the API key actions.
     /// </summary>
-    public DbSet<ApiKeyAction> ApiKeyActions { get; set; }
+    public DbSet<ApiKeyAction>? ApiKeyActions { get; set; }
 
     /// <summary>
     /// Gets or sets the idempotency keys.
     /// </summary>
-    public DbSet<IdempotencyKey> IdempotencyKeys { get; set; }
+    public DbSet<IdempotencyKey>? IdempotencyKeys { get; set; }
 
     /// <summary>
     /// Validates that append-only entities are not being modified or deleted.

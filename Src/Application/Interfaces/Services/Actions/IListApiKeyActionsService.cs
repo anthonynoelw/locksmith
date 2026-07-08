@@ -1,4 +1,5 @@
 namespace Application.Interfaces.Services.Actions;
+
 using Domain.Models;
 
 /// <summary>
