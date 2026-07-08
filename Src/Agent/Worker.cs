@@ -10,18 +10,11 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     /// </summary>
     /// <param name="stoppingToken">Cancellation token to stop the worker.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Key-expiry polling is not implemented yet (see Docs/TODO.md); the worker currently
+        // only logs startup and performs no periodic work.
         logger.LogInformation("Worker starting at: {time}", DateTimeOffset.Now);
-        return;
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            if (logger.IsEnabled(LogLevel.Information))
-            {
-                logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-            }
-
-            await Task.Delay(1000, stoppingToken);
-        }
+        return Task.CompletedTask;
     }
 }
