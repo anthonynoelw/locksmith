@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Interfaces;
+using Application.Interfaces.Repositories;
 using Application.Interfaces.Services.Actions;
 using Domain.Enums;
 using Domain.Exceptions;
@@ -17,36 +18,42 @@ using Domain.Models;
 public sealed class ReplaceApiKeyActionsService : IReplaceApiKeyActionsService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IIdempotencyKeyRepository _idempotencyKeyRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ReplaceApiKeyActionsService"/> class.
     /// </summary>
     /// <param name="unitOfWork">Unit of work for repository access.</param>
-    public ReplaceApiKeyActionsService(IUnitOfWork unitOfWork)
+    /// <param name="idempotencyKeyRepository">Repository for looking up idempotency keys.</param>
+    public ReplaceApiKeyActionsService(IUnitOfWork unitOfWork, IIdempotencyKeyRepository idempotencyKeyRepository)
     {
         _unitOfWork = unitOfWork;
+        _idempotencyKeyRepository = idempotencyKeyRepository;
     }
 
     /// <summary>
     /// Replaces the currently granted actions of an API key with the requested set,
     /// revoking removed actions and granting added ones atomically.
     /// </summary>
-    /// <param name="apiKeyId">The ID of the API key.</param>
+    /// <param name="idempotencyKeyHash">The hash of the idempotency key that identifies the API key.</param>
     /// <param name="actions">The desired set of granted actions.</param>
     /// <param name="createdBy">The identity of the caller replacing the actions.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The resulting active actions granted to the API key.</returns>
     /// <exception cref="NotFoundException">
-    /// Thrown when no API key exists for the given <paramref name="apiKeyId"/>.
+    /// Thrown when no API key exists for the given <paramref name="idempotencyKeyHash"/>.
     /// </exception>
     public async Task<IReadOnlyList<ApiKeyAction>> ExecuteAsync(
-        Guid apiKeyId,
+        string idempotencyKeyHash,
         IReadOnlyList<ApiKeyActionEnum> actions,
         string createdBy,
         CancellationToken cancellationToken = default)
     {
-        ApiKey apiKey = await _unitOfWork.ApiKeys.GetByIdAsync(apiKeyId, cancellationToken)
-            ?? throw new NotFoundException($"API key with ID {apiKeyId} not found.");
+        IdempotencyKey idempotencyKey = await _idempotencyKeyRepository.GetByHashAsync(idempotencyKeyHash, cancellationToken)
+            ?? throw new NotFoundException($"API key with idempotency key {idempotencyKeyHash} not found.");
+
+        Guid apiKeyId = idempotencyKey.ApiKeyId;
+        ApiKey apiKey = idempotencyKey.ApiKey;
 
         IReadOnlyList<ApiKeyAction> active = await _unitOfWork.ApiKeyActions.GetActiveByApiKeyIdAsync(
             apiKeyId,

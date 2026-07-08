@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Api.Requests;
 using Api.Responses;
+using Application.Interfaces.Services;
 using Application.Interfaces.Services.Actions;
 using Domain;
 using Domain.Enums;
@@ -23,6 +24,7 @@ public sealed class ApiKeyActionController : Controller
     private readonly IReplaceApiKeyActionsService _replaceApiKeyActionsService;
     private readonly IGrantApiKeyActionService _grantApiKeyActionService;
     private readonly IRevokeApiKeyActionService _revokeApiKeyActionService;
+    private readonly ICryptoService _cryptoService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ApiKeyActionController"/> class.
@@ -31,16 +33,19 @@ public sealed class ApiKeyActionController : Controller
     /// <param name="replaceApiKeyActionsService">The service to replace the full action set of an API key.</param>
     /// <param name="grantApiKeyActionService">The service to grant a single action to an API key.</param>
     /// <param name="revokeApiKeyActionService">The service to revoke a single action from an API key.</param>
+    /// <param name="cryptoService">The service to hash the idempotency key.</param>
     public ApiKeyActionController(
         IListApiKeyActionsService listApiKeyActionsService,
         IReplaceApiKeyActionsService replaceApiKeyActionsService,
         IGrantApiKeyActionService grantApiKeyActionService,
-        IRevokeApiKeyActionService revokeApiKeyActionService)
+        IRevokeApiKeyActionService revokeApiKeyActionService,
+        ICryptoService cryptoService)
     {
         _listApiKeyActionsService = listApiKeyActionsService;
         _replaceApiKeyActionsService = replaceApiKeyActionsService;
         _grantApiKeyActionService = grantApiKeyActionService;
         _revokeApiKeyActionService = revokeApiKeyActionService;
+        _cryptoService = cryptoService;
     }
 
     /// <summary>
@@ -61,8 +66,8 @@ public sealed class ApiKeyActionController : Controller
     /// <summary>
     /// Replaces the full action set of an API key, revoking removed actions and granting added ones.
     /// </summary>
-    /// <param name="keyId">The ID of the API key.</param>
-    /// <param name="request">The desired set of granted actions.</param>
+    /// <param name="keyId">The ID of the API key (deprecated - use idempotency key in request body).</param>
+    /// <param name="request">The desired set of granted actions and the idempotency key.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>
     /// 200 OK with the resulting active actions, 404 Not Found if the key does not exist,
@@ -77,8 +82,10 @@ public sealed class ApiKeyActionController : Controller
     {
         ValidateActions(request.Actions);
 
+        string idempotencyKeyHash = _cryptoService.HashForLookup(request.IdempotencyKey);
+
         IReadOnlyList<ApiKeyAction> result = await _replaceApiKeyActionsService.ExecuteAsync(
-            keyId,
+            idempotencyKeyHash,
             request.Actions,
             WellKnown.CallerIdentities.API_CLIENT,
             ct);
@@ -89,8 +96,9 @@ public sealed class ApiKeyActionController : Controller
     /// <summary>
     /// Grants a single action to an API key.
     /// </summary>
-    /// <param name="keyId">The ID of the API key.</param>
+    /// <param name="keyId">The ID of the API key (deprecated - use idempotency key in request body).</param>
     /// <param name="actionName">The name of the action to grant.</param>
+    /// <param name="request">The idempotency key that identifies the API key.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>
     /// 201 Created with the granted action, 404 Not Found if the key does not exist,
@@ -98,12 +106,18 @@ public sealed class ApiKeyActionController : Controller
     /// </returns>
     [HttpPost("{actionName}")]
     [Authorize]
-    public async Task<IActionResult> Grant(Guid keyId, string actionName, CancellationToken ct)
+    public async Task<IActionResult> Grant(
+        Guid keyId,
+        string actionName,
+        [FromBody] GrantApiKeyActionRequest request,
+        CancellationToken ct)
     {
         ApiKeyActionEnum parsed = ParseAction(actionName);
 
+        string idempotencyKeyHash = _cryptoService.HashForLookup(request.IdempotencyKey);
+
         ApiKeyAction result = await _grantApiKeyActionService.ExecuteAsync(
-            keyId,
+            idempotencyKeyHash,
             parsed,
             WellKnown.CallerIdentities.API_CLIENT,
             ct);
@@ -116,8 +130,9 @@ public sealed class ApiKeyActionController : Controller
     /// <summary>
     /// Revokes a single action from an API key.
     /// </summary>
-    /// <param name="keyId">The ID of the API key.</param>
+    /// <param name="keyId">The ID of the API key (deprecated - use idempotency key in request body).</param>
     /// <param name="actionName">The name of the action to revoke.</param>
+    /// <param name="request">The idempotency key that identifies the API key.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>
     /// 204 No Content on success, 404 Not Found if the key does not exist or the action is not granted,
@@ -125,11 +140,17 @@ public sealed class ApiKeyActionController : Controller
     /// </returns>
     [HttpDelete("{actionName}")]
     [Authorize]
-    public async Task<IActionResult> Revoke(Guid keyId, string actionName, CancellationToken ct)
+    public async Task<IActionResult> Revoke(
+        Guid keyId,
+        string actionName,
+        [FromBody] RevokeApiKeyActionRequest request,
+        CancellationToken ct)
     {
         ApiKeyActionEnum parsed = ParseAction(actionName);
 
-        await _revokeApiKeyActionService.ExecuteAsync(keyId, parsed, ct);
+        string idempotencyKeyHash = _cryptoService.HashForLookup(request.IdempotencyKey);
+
+        await _revokeApiKeyActionService.ExecuteAsync(idempotencyKeyHash, parsed, ct);
 
         return NoContent();
     }
