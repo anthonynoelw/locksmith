@@ -109,6 +109,12 @@ internal static class ServiceExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        builder.Services
+            .AddOptions<RateLimitSettings>()
+            .BindConfiguration(WellKnown.ConfigSections.RATE_LIMITING)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<CryptoSettings>>().Value);
         builder.Services.AddScoped<ICryptoService, CryptoService>();
         builder.Services.AddScoped<ICreateApiKeyService, CreateApiKeyService>();

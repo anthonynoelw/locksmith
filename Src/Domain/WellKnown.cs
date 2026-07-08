@@ -20,6 +20,9 @@ public static class WellKnown
 
         /// <summary>The "Cache" configuration section (response cache-control durations).</summary>
         public const string CACHE = "Cache";
+
+        /// <summary>The "RateLimiting" configuration section (per-API-key rate limiter settings).</summary>
+        public const string RATE_LIMITING = "RateLimiting";
     }
 
     /// <summary>
@@ -97,5 +100,21 @@ public static class WellKnown
     {
         /// <summary>The identity recorded for requests authenticated with the pre-shared bearer token.</summary>
         public const string API_CLIENT = "api-client";
+    }
+
+    /// <summary>
+    /// Response header names emitted by the rate limiter to communicate the current quota state.
+    /// Set on every rate-limited response; <c>Retry-After</c> is added alongside these on a 429.
+    /// </summary>
+    public static class RateLimitHeaders
+    {
+        /// <summary>The maximum number of requests permitted within the current window.</summary>
+        public const string LIMIT = "X-RateLimit-Limit";
+
+        /// <summary>The number of requests remaining in the current window.</summary>
+        public const string REMAINING = "X-RateLimit-Remaining";
+
+        /// <summary>The Unix time (seconds) at which the current window resets.</summary>
+        public const string RESET = "X-RateLimit-Reset";
     }
 }
