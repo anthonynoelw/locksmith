@@ -494,6 +494,6 @@ What data never leaves the server? What is the attack surface?
 
 - Every versioned endpoint requires a valid bearer token; the four `X-Api-Key`-resolved reads require that header too.
 - Every response carries an explicit cache directive — no response is cacheable by accident.
-- The four `X-Api-Key`-resolved reads are rate limited per API key via a Redis-backed sliding window (`RateLimitFilter`); mutations are not yet covered.
+- The four `X-Api-Key`-resolved reads are rate limited per API key via a Redis-backed sliding window (`RateLimitFilter`);
 
 For threat-specific analysis, see [Security/threat-model.md](../Security/threat-model.md).
