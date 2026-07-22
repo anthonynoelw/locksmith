@@ -50,7 +50,7 @@ Located in `Src/Infrastructure/`. Implements the interfaces defined in Applicati
 
 Located in `Src/Api/`. ASP.NET Core entry point. Hosts HTTP endpoints and orchestrates the request-to-response pipeline.
 
-- **Controllers:** `ApiKeyController`, `ApiKeyStatusController`, `ApiKeyActionController` — all inherit from `Src/Api/Controllers/Controller.cs`, which carries the versioned route template (`/api/v{version:apiVersion}/[controller]`) and `[Authorize]`; each controller overrides the route to `api/v{version:apiVersion}/api-key` so all three share the same base path
+- **Controllers:** `ApiKeyController`, `ApiKeyStatusController`, `ApiKeyActionController`, versioned under `Src/Api/Controllers/V1/` with an explicit `[ApiVersion(1.0)]` attribute — all inherit from `Src/Api/Controllers/Controller.cs`, which carries the versioned route template (`/api/v{version:apiVersion}/[controller]`) and `[Authorize]`; each controller overrides the route to `api/v{version:apiVersion}/api-key` so all three share the same base path
 - **Authentication:** `BearerTokenAuthenticationHandler` — a custom `AuthenticationHandler<T>` that validates the static bearer token with constant-time comparison
 - **`ResolveApiKeyFilter`:** an `IAsyncActionFilter` that resolves the `X-Api-Key` header to a key identity for the four read endpoints that need it (see [api-surface.md](api-surface.md#identifying-a-key))
 - **`ResponseCacheControlFilter`:** an `IAlwaysRunResultFilter` that stamps `no-store` on every response by default, or a short private cache on actions marked `[Cacheable]` (see [api-surface.md](api-surface.md#response-caching))
@@ -173,9 +173,9 @@ DELETE /api/v1/api-key/actions/{actionName}
 
 Note the route is singular — `api-key`, not `api-keys` or `keys` — and there is no `{id}` path segment; see [Identifying a key](api-surface.md#identifying-a-key) in the API surface doc for how each endpoint resolves the target key instead.
 
-The base controller at `Src/Api/Controllers/Controller.cs` carries `[Authorize]` and the versioned route template; each of the three controllers (`ApiKeyController`, `ApiKeyStatusController`, `ApiKeyActionController`) overrides the route to the shared `api/v{version:apiVersion}/api-key` prefix. Each API version can have its own OpenAPI document via `ApiVersionDocumentTransformer`, browsable through the Scalar UI at `/scalar/v1`.
+The base controller at `Src/Api/Controllers/Controller.cs` carries `[Authorize]` and the versioned route template; each of the three controllers (`ApiKeyController`, `ApiKeyStatusController`, `ApiKeyActionController`), living under `Src/Api/Controllers/V1/` and decorated with `[ApiVersion(1.0)]`, overrides the route to the shared `api/v{version:apiVersion}/api-key` prefix. Each API version can have its own OpenAPI document via `ApiVersionDocumentTransformer`, browsable through the Scalar UI at `/scalar/v1`.
 
-To add a new version, register a new `AddOpenApi("v2", ...)` call in `ServiceExtensions.AddApiServices()` and add versioned controller actions. Old versions remain in the codebase until explicitly removed.
+To add a new version, create a `V2` controller folder/namespace with `[ApiVersion(2.0)]` on each controller, register a new `AddOpenApi("v2", ...)` call in `ServiceExtensions.AddApiServices()`, and add versioned controller actions. Old versions remain in the codebase until explicitly removed.
 
 ---
 

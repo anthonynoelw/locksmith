@@ -1,12 +1,14 @@
-namespace Api.Controllers;
+namespace Api.Controllers.V1;
 
 using System.Collections.Generic;
 using System.Linq;
+using Api.Controllers;
 using Api.Extensions;
 using Api.Filters;
 using Api.Requests;
 using Api.Responses;
 using Application.Interfaces.Services.Actions;
+using Asp.Versioning;
 using Domain;
 using Domain.Models;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +17,7 @@ using Microsoft.AspNetCore.Mvc;
 /// <summary>
 /// Manages the action permissions granted to an API key.
 /// </summary>
+[ApiVersion(1.0)]
 [Route("api/v{version:apiVersion}/api-key")]
 public sealed class ApiKeyActionController : Controller
 {
