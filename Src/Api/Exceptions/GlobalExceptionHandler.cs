@@ -1,5 +1,7 @@
 namespace Api.Exceptions;
 
+using Api.Filters;
+
 using Domain.Exceptions;
 
 using Microsoft.AspNetCore.Diagnostics;
@@ -78,6 +80,11 @@ public sealed class GlobalExceptionHandler(
         };
 
         httpContext.Response.StatusCode = problemDetails.Status!.Value;
+
+        // Error responses are produced in middleware, outside the MVC result pipeline, so the
+        // NoStoreResponseFilter never runs for them. Stamp the same directives here so the no-store
+        // guarantee is universal.
+        NoStoreResponseFilter.ApplyNoStore(httpContext.Response.Headers);
 
         await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {

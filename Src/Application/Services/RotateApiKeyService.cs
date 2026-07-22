@@ -48,7 +48,7 @@ public sealed class RotateApiKeyService : IRotateApiKeyService
         string idempotencyKeyHash = _cryptoService.HashForLookup(idempotencyKey);
 
         IdempotencyKey idempotencyKeyEntity = await _unitOfWork.IdempotencyKeys.GetByHashAsync(idempotencyKeyHash, ct)
-            ?? throw new NotFoundException($"API key with idempotency key {idempotencyKeyHash} not found.");
+            ?? throw new NotFoundException("No API key matches the provided idempotency key.");
 
         IReadOnlyList<ApiKeyActionEnum> actions = (await _unitOfWork.ApiKeyActions.GetActiveByApiKeyIdAsync(
             idempotencyKeyEntity.ApiKeyId,

@@ -7,7 +7,8 @@ using Application.Infrastructure;
 using FluentAssertions;
 
 /// <summary>
-/// Integration tests for GET /api/v{version}/api-keys/{id} endpoint.
+/// Integration tests for GET /api/v{version}/api-key, which returns the metadata of the API key
+/// identified by the X-Api-Key header.
 /// Requires PostgreSQL running on localhost:5432 with database 'locksmith_test'.
 /// </summary>
 [Collection("Application")]
@@ -16,31 +17,21 @@ public sealed class GetApiKeyByIdEndpointTests(ApplicationFixture fixture) : App
     private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task GET_GetApiKeyById_WithValidId_Returns200Ok()
+    public async Task GET_Current_WithValidSecret_Returns200Ok()
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
-        Guid keyId = createdKey.Id;
 
-        // Now get the key by ID
-        using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{keyId}");
-        getRequest.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage getResponse = await Client.SendAsync(getRequest);
+        HttpResponseMessage getResponse = await GetWithApiKeyAsync("/api/v1/api-key", createdKey.Secret);
 
         getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
-    public async Task GET_GetApiKeyById_ReturnsMetadataResponse()
+    public async Task GET_Current_ReturnsMetadataResponse()
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync([1, 2]); // Write, Delete
-        Guid keyId = createdKey.Id;
 
-        // Get the key
-        using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{keyId}");
-        getRequest.Headers.Authorization = new ("Bearer", "test-bearer-token");
-
-        HttpResponseMessage getResponse = await Client.SendAsync(getRequest);
+        HttpResponseMessage getResponse = await GetWithApiKeyAsync("/api/v1/api-key", createdKey.Secret);
         string getBody = await getResponse.Content.ReadAsStringAsync();
 
         getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -49,7 +40,7 @@ public sealed class GetApiKeyByIdEndpointTests(ApplicationFixture fixture) : App
         ApiKeyMetadataResponse? metadata = JsonSerializer.Deserialize<ApiKeyMetadataResponse>(getBody, _jsonOptions);
 
         metadata.Should().NotBeNull();
-        metadata!.Id.Should().Be(keyId);
+        metadata!.Id.Should().Be(createdKey.Id);
         metadata.MaskedSecretHash.Should().StartWith("****");
         metadata.CreatedAt.Should().NotBe(default);
         metadata.ExpiresAt.Should().NotBe(default);
@@ -57,15 +48,45 @@ public sealed class GetApiKeyByIdEndpointTests(ApplicationFixture fixture) : App
     }
 
     [Fact]
-    public async Task GET_GetApiKeyById_WithNonExistentId_Returns404NotFound()
+    public async Task GET_Current_WithUnknownSecret_Returns404NotFound()
     {
-        Guid nonExistentId = Guid.NewGuid();
+        HttpResponseMessage getResponse = await GetWithApiKeyAsync("/api/v1/api-key", "lk_nonexistent-secret");
 
-        using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{nonExistentId}");
-        getRequest.Headers.Authorization = new ("Bearer", "test-bearer-token");
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GET_Current_WithUnknownSecret_DoesNotReflectSecretInResponseBody()
+    {
+        const string SECRET = "lk_super-secret-should-not-be-echoed";
+
+        HttpResponseMessage getResponse = await GetWithApiKeyAsync("/api/v1/api-key", SECRET);
+        string body = await getResponse.Content.ReadAsStringAsync();
+
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        body.Should().NotContain(SECRET);
+    }
+
+    [Fact]
+    public async Task GET_Current_WithUnknownSecret_ErrorResponse_IsNoStore()
+    {
+        // The 404 is produced by GlobalExceptionHandler in middleware, outside the MVC result pipeline,
+        // so this guards that no-store is applied to error responses too.
+        HttpResponseMessage getResponse = await GetWithApiKeyAsync("/api/v1/api-key", "lk_nonexistent-secret");
+
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        getResponse.Headers.CacheControl.Should().NotBeNull();
+        getResponse.Headers.CacheControl!.NoStore.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GET_Current_WithoutApiKeyHeader_Returns400BadRequest()
+    {
+        using var getRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key");
+        getRequest.Headers.Authorization = new ("Bearer", BEARER_TOKEN);
 
         HttpResponseMessage getResponse = await Client.SendAsync(getRequest);
 
-        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        getResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

@@ -34,7 +34,7 @@ public sealed class DeleteApiKeyService : IDeleteApiKeyService
         IdempotencyKey idempotencyKeyEntity = await _unitOfWork.IdempotencyKeys.GetByHashAsync(
             idempotencyKeyHash,
             cancellationToken)
-            ?? throw new NotFoundException($"API key with idempotency key {idempotencyKeyHash} not found.");
+            ?? throw new NotFoundException("No API key matches the provided idempotency key.");
 
         await _unitOfWork.ApiKeys.DeleteAsync(idempotencyKeyEntity.ApiKeyId, cancellationToken);
 

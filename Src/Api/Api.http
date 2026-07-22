@@ -1,5 +1,12 @@
 @Api_HostAddress = http://localhost:5281
 
+# Every /api/v1/api-key endpoint requires the pre-shared bearer token.
+# Read (GET) endpoints additionally identify the target key via the X-Api-Key header
+# (the key's plaintext secret). Mutations identify the key via the idempotency key in the body.
+@BearerToken = replace-with-Api__BearerToken
+@Secret = replace-with-a-key-secret
+@IdempotencyKey = replace-with-a-key-idempotency-key
+
 GET {{Api_HostAddress}}/health
 Accept: application/json
 
@@ -7,5 +14,106 @@ Accept: application/json
 
 GET {{Api_HostAddress}}/health/ready
 Accept: application/json
+
+###
+
+# Create a new API key. The response's secret + idempotencyKey are shown only once.
+POST {{Api_HostAddress}}/api/v1/api-key
+Authorization: Bearer {{BearerToken}}
+Content-Type: application/json
+
+{
+  "actions": [0, 1]
+}
+
+###
+
+# Get the metadata of the key identified by the X-Api-Key header.
+GET {{Api_HostAddress}}/api/v1/api-key
+Authorization: Bearer {{BearerToken}}
+X-Api-Key: {{Secret}}
+
+###
+
+# Get the current status of the key identified by the X-Api-Key header.
+GET {{Api_HostAddress}}/api/v1/api-key/status
+Authorization: Bearer {{BearerToken}}
+X-Api-Key: {{Secret}}
+
+###
+
+# Get the status history of the key identified by the X-Api-Key header.
+GET {{Api_HostAddress}}/api/v1/api-key/status/history
+Authorization: Bearer {{BearerToken}}
+X-Api-Key: {{Secret}}
+
+###
+
+# Get the granted actions of the key identified by the X-Api-Key header.
+GET {{Api_HostAddress}}/api/v1/api-key/actions
+Authorization: Bearer {{BearerToken}}
+X-Api-Key: {{Secret}}
+
+###
+
+# List all API keys (admin).
+GET {{Api_HostAddress}}/api/v1/api-key/all?limit=50&offset=0
+Authorization: Bearer {{BearerToken}}
+
+###
+
+# Retrieve (decrypt) a key's secret by its idempotency key.
+POST {{Api_HostAddress}}/api/v1/api-key/secret
+Authorization: Bearer {{BearerToken}}
+Content-Type: application/json
+
+{
+  "idempotencyKey": "{{IdempotencyKey}}"
+}
+
+###
+
+# Validate a plaintext secret.
+POST {{Api_HostAddress}}/api/v1/api-key/validate
+Authorization: Bearer {{BearerToken}}
+Content-Type: application/json
+
+{
+  "secret": "{{Secret}}"
+}
+
+###
+
+# Update the status of a key by its idempotency key.
+PATCH {{Api_HostAddress}}/api/v1/api-key/status
+Authorization: Bearer {{BearerToken}}
+Content-Type: application/json
+
+{
+  "idempotencyKey": "{{IdempotencyKey}}",
+  "status": 1
+}
+
+###
+
+# Grant an action to a key by its idempotency key.
+POST {{Api_HostAddress}}/api/v1/api-key/actions/Write
+Authorization: Bearer {{BearerToken}}
+Content-Type: application/json
+
+{
+  "idempotencyKey": "{{IdempotencyKey}}"
+}
+
+###
+
+# Rotate a key by its idempotency key.
+POST {{Api_HostAddress}}/api/v1/api-key/rotate
+Authorization: Bearer {{BearerToken}}
+Content-Type: application/json
+
+{
+  "idempotencyKey": "{{IdempotencyKey}}"
+}
 
 ###

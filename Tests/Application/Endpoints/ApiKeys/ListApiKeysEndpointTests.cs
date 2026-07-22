@@ -18,7 +18,7 @@ public sealed class ListApiKeysEndpointTests(ApplicationFixture fixture) : Appli
     [Fact]
     public async Task GET_ListApiKeys_WithValidRequest_Returns200Ok()
     {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all");
         requestMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
@@ -29,7 +29,7 @@ public sealed class ListApiKeysEndpointTests(ApplicationFixture fixture) : Appli
     [Fact]
     public async Task GET_ListApiKeys_ReturnsListResponseWithPagination()
     {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all");
         requestMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
@@ -50,7 +50,7 @@ public sealed class ListApiKeysEndpointTests(ApplicationFixture fixture) : Appli
     [Fact]
     public async Task GET_ListApiKeys_WithCustomPagination_RespectsLimitAndOffset()
     {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys?limit=10&offset=0");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all?limit=10&offset=0");
         requestMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
@@ -66,9 +66,9 @@ public sealed class ListApiKeysEndpointTests(ApplicationFixture fixture) : Appli
     }
 
     [Fact]
-    public async Task GET_ListApiKeys_WithInvalidLimit_UsesDefault()
+    public async Task GET_ListApiKeys_WithOverMaxLimit_ClampsToMaximum()
     {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys?limit=2000&offset=0");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all?limit=2000&offset=0");
         requestMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
@@ -79,7 +79,24 @@ public sealed class ListApiKeysEndpointTests(ApplicationFixture fixture) : Appli
         ListApiKeysResponse? body = JsonSerializer.Deserialize<ListApiKeysResponse>(jsonBody, _jsonOptions);
 
         body.Should().NotBeNull();
-        body!.Limit.Should().Be(50); // default when > 1000
+        body!.Limit.Should().Be(1000); // clamped down to the maximum, not reset to the default
+    }
+
+    [Fact]
+    public async Task GET_ListApiKeys_WithNonPositiveLimit_UsesDefault()
+    {
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all?limit=0&offset=0");
+        requestMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
+
+        HttpResponseMessage response = await Client.SendAsync(requestMessage);
+        string jsonBody = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        ListApiKeysResponse? body = JsonSerializer.Deserialize<ListApiKeysResponse>(jsonBody, _jsonOptions);
+
+        body.Should().NotBeNull();
+        body!.Limit.Should().Be(50); // unspecified/non-positive falls back to the default
     }
 
     [Fact]
@@ -89,7 +106,7 @@ public sealed class ListApiKeysEndpointTests(ApplicationFixture fixture) : Appli
         Guid createdKeyId = createdKey.Id;
 
         // Now list and verify the created key is in the list
-        using var listMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys");
+        using var listMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all");
         listMessage.Headers.Authorization = new ("Bearer", "test-bearer-token");
 
         HttpResponseMessage listResponse = await Client.SendAsync(listMessage);

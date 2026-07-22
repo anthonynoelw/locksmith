@@ -28,7 +28,7 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/validate")
+        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/validate")
         {
             Content = validateContent,
         };
@@ -53,7 +53,7 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/validate")
+        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/validate")
         {
             Content = validateContent,
         };
@@ -82,7 +82,7 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/validate")
+        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/validate")
         {
             Content = validateContent,
         };
@@ -102,7 +102,7 @@ public sealed class ValidateApiKeySecretEndpointTests(ApplicationFixture fixture
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/validate")
+        using var validateMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/validate")
         {
             Content = validateContent,
         };

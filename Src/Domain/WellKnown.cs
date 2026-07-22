@@ -56,6 +56,37 @@ public static class WellKnown
     }
 
     /// <summary>
+    /// Well-known custom request header names.
+    /// </summary>
+    public static class RequestHeaders
+    {
+        /// <summary>
+        /// Header carrying the caller's plaintext API key secret. On read (GET) endpoints it identifies
+        /// which API key the request is about; it is also the partition source for future rate limiting.
+        /// </summary>
+        public const string API_KEY = "X-Api-Key";
+    }
+
+    /// <summary>
+    /// Keys used to stash per-request values on <c>HttpContext.Items</c>.
+    /// </summary>
+    public static class HttpContextItems
+    {
+        /// <summary>The identifier of the API key resolved from the <see cref="RequestHeaders.API_KEY"/> header.</summary>
+        public const string RESOLVED_API_KEY_ID = "ResolvedApiKeyId";
+    }
+
+    /// <summary>
+    /// Rate-limiting policy names. Reserved for the future limiter that partitions by the resolved
+    /// API key; not yet wired into a limiter.
+    /// </summary>
+    public static class RateLimitPolicies
+    {
+        /// <summary>Per-API-key rate-limit policy, partitioned by the caller's API key.</summary>
+        public const string PER_API_KEY = "per-api-key";
+    }
+
+    /// <summary>
     /// Caller identities recorded in <c>CreatedBy</c> audit columns. Audit columns are persisted and
     /// exposed in API responses, so they must never contain secrets such as the bearer token itself.
     /// </summary>

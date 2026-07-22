@@ -5,7 +5,7 @@ using Application.Interfaces.Services;
 using Domain.Exceptions;
 using Domain.Models;
 
-/// <summary>Retrieves an API key by its identifier.</summary>
+/// <summary>Retrieves an API key's metadata by its identifier.</summary>
 public sealed class GetApiKeyByIdService : IGetApiKeyByIdService
 {
     private readonly IUnitOfWork _unitOfWork;
@@ -18,7 +18,7 @@ public sealed class GetApiKeyByIdService : IGetApiKeyByIdService
     }
 
     /// <inheritdoc/>
-    public async Task<ApiKey> ExecuteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ApiKeyMetadata> ExecuteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         ApiKey? apiKey = await _unitOfWork.ApiKeys.GetByIdAsync(id, cancellationToken);
 
@@ -27,6 +27,6 @@ public sealed class GetApiKeyByIdService : IGetApiKeyByIdService
             throw new NotFoundException($"API key with ID {id} not found.");
         }
 
-        return apiKey;
+        return ApiKeyMetadataMapper.ToMetadata(apiKey);
     }
 }
