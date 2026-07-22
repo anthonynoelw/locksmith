@@ -122,6 +122,7 @@ public sealed class ApiKeyController : Api.Controllers.Controller
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>200 OK with the decrypted secret, or 404 Not Found if the idempotency key is invalid.</returns>
     [HttpPost("secret")]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(typeof(RetrieveSecretResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<RetrieveSecretResponse>> RetrieveSecret(
         [FromBody] RetrieveSecretRequest request,
@@ -139,6 +140,7 @@ public sealed class ApiKeyController : Api.Controllers.Controller
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>200 OK with the validation result, or 404 Not Found if the secret is invalid.</returns>
     [HttpPost("validate")]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(typeof(ValidateApiKeySecretResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ValidateApiKeySecretResponse>> Validate(
         [FromBody] ValidateApiKeySecretRequest request,
@@ -156,6 +158,7 @@ public sealed class ApiKeyController : Api.Controllers.Controller
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>201 Created with the new key ID, plaintext secret, and idempotency key, or 404 Not Found if the idempotency key is invalid.</returns>
     [HttpPost("rotate")]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(typeof(CreateApiKeyResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<CreateApiKeyResponse>> Rotate(
         [FromBody] UpdateApiKeyRequest request,
@@ -174,6 +177,7 @@ public sealed class ApiKeyController : Api.Controllers.Controller
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>204 No Content on success, or 404 Not Found if the idempotency key is invalid.</returns>
     [HttpDelete]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(
         [FromBody] UpdateApiKeyRequest request,

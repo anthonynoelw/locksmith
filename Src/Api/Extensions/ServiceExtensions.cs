@@ -139,6 +139,10 @@ internal static class ServiceExtensions
         // Enforces per-API-key rate limiting on the endpoints ResolveApiKeyFilter resolves an identity for.
         builder.Services.AddScoped<RateLimitFilter>();
 
+        // Enforces the same per-API-key rate limiting on idempotencyKey/secret-identified mutation
+        // endpoints, which carry no X-Api-Key header for ResolveApiKeyFilter to resolve.
+        builder.Services.AddScoped<CredentialRateLimitFilter>();
+
         return builder;
     }
 }

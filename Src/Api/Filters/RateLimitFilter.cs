@@ -1,12 +1,8 @@
 namespace Api.Filters;
 
-using System.Globalization;
 using Api.Extensions;
 using Application.Interfaces.Services;
 using Application.Settings;
-using Domain;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
 
@@ -21,8 +17,6 @@ using Microsoft.Extensions.Options;
 /// </remarks>
 public sealed class RateLimitFilter : IAsyncActionFilter
 {
-    private const string PROBLEM_TYPE_429 = "https://tools.ietf.org/html/rfc6585#section-4";
-
     private readonly IRateLimiter _rateLimiter;
     private readonly RateLimitSettings _settings;
 
@@ -48,45 +42,14 @@ public sealed class RateLimitFilter : IAsyncActionFilter
 
         RateLimitResult result = await _rateLimiter.AcquireAsync(partitionKey, context.HttpContext.RequestAborted);
 
-        ApplyQuotaHeaders(context.HttpContext.Response, result);
+        RateLimitResponseWriter.ApplyQuotaHeaders(context.HttpContext.Response, result);
 
         if (!result.IsAllowed)
         {
-            context.Result = BuildTooManyRequestsResult(context.HttpContext, result);
+            context.Result = RateLimitResponseWriter.BuildTooManyRequestsResult(context.HttpContext, result);
             return;
         }
 
         await next();
-    }
-
-    private static void ApplyQuotaHeaders(HttpResponse response, RateLimitResult result)
-    {
-        response.Headers[WellKnown.RateLimitHeaders.LIMIT] =
-            result.Limit.ToString(CultureInfo.InvariantCulture);
-        response.Headers[WellKnown.RateLimitHeaders.REMAINING] =
-            result.Remaining.ToString(CultureInfo.InvariantCulture);
-        response.Headers[WellKnown.RateLimitHeaders.RESET] =
-            result.ResetAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
-    }
-
-    private static ObjectResult BuildTooManyRequestsResult(HttpContext httpContext, RateLimitResult result)
-    {
-        int retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(result.RetryAfter.TotalSeconds));
-        httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
-
-        var problemDetails = new ProblemDetails
-        {
-            Status = StatusCodes.Status429TooManyRequests,
-            Title = "Too Many Requests",
-            Type = PROBLEM_TYPE_429,
-            Detail = "Rate limit exceeded for this API key. Retry after the period indicated by the Retry-After header.",
-            Instance = httpContext.Request.Path,
-        };
-
-        return new ObjectResult(problemDetails)
-        {
-            StatusCode = StatusCodes.Status429TooManyRequests,
-            ContentTypes = { "application/problem+json" },
-        };
     }
 }

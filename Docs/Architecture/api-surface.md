@@ -53,9 +53,16 @@ Every response carries an explicit `Cache-Control` directive — there is no unm
 
 ## Rate limiting
 
-Applied only to the same four `X-Api-Key`-resolved `GET` endpoints as [response caching](#response-caching) above (current key, current status, status history, active actions) — `RateLimitFilter` partitions on the API key ID `ResolveApiKeyFilter` resolved earlier in the same action's filter pipeline, so it must run after it. `idempotencyKey`-identified mutations and the bulk endpoints (`create`, `list all`, `validate`) are not rate limited.
+Two partitioning strategies cover different endpoint shapes:
 
-A distributed sliding-window limiter (`RedisSlidingWindowRateLimiter`), keyed per API key ID in Redis, enforces the quota correctly across multiple API instances. Configurable via the `RateLimiting` section (`RateLimitSettings`): `Enabled`, `PermitLimit`, `WindowSeconds`, and `FailOpen` (whether requests pass through when Redis is unavailable; defaults to `true`).
+| Filter | Partition key | Applied to |
+|---|---|---|
+| `RateLimitFilter` | The API key ID `ResolveApiKeyFilter` resolved earlier in the same action's filter pipeline (must run after it) | The four `X-Api-Key`-resolved `GET` endpoints (current key, current status, status history, active actions) |
+| `CredentialRateLimitFilter` | A hash (`ICryptoService.HashForLookup`) of the bound request body's `idempotencyKey` or `secret` — the same hash the corresponding DB lookup uses, so no extra round trip is needed just to rate limit | Every `idempotencyKey`/secret-identified mutation: retrieve secret, validate, rotate, delete, replace actions, grant action, revoke action, update status |
+
+`create` and `list all` remain unthrottled — they target no existing key, so neither filter has anything to partition on.
+
+A distributed sliding-window limiter (`RedisSlidingWindowRateLimiter`), keyed per partition in Redis, enforces the quota correctly across multiple API instances. Configurable via the `RateLimiting` section (`RateLimitSettings`): `Enabled`, `PermitLimit`, `WindowSeconds`, and `FailOpen` (whether requests pass through when Redis is unavailable; defaults to `true`).
 
 Every rate-limited response carries:
 

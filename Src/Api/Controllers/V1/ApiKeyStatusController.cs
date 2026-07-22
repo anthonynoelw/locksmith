@@ -89,6 +89,7 @@ public sealed class ApiKeyStatusController : Api.Controllers.Controller
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>200 OK once the status has been updated.</returns>
     [HttpPatch("status")]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         [FromBody] UpdateApiKeyStatusRequest request,

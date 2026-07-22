@@ -73,6 +73,7 @@ public sealed class ApiKeyActionController : Api.Controllers.Controller
     /// or 422 Unprocessable Entity when the request contains an undefined action value.
     /// </returns>
     [HttpPut("actions")]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(typeof(IReadOnlyList<ApiKeyActionResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ApiKeyActionResponse>>> Replace(
         [FromBody] UpdateApiKeyActionsRequest request,
@@ -98,6 +99,7 @@ public sealed class ApiKeyActionController : Api.Controllers.Controller
     /// 409 Conflict if the action is already granted, or 422 Unprocessable Entity on an invalid action name.
     /// </returns>
     [HttpPost("actions/{actionName}")]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(typeof(ApiKeyActionResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<ApiKeyActionResponse>> Grant(
         [FromRoute] string actionName,
@@ -125,6 +127,7 @@ public sealed class ApiKeyActionController : Api.Controllers.Controller
     /// or 422 Unprocessable Entity on an invalid action name.
     /// </returns>
     [HttpDelete("actions/{actionName}")]
+    [ServiceFilter(typeof(CredentialRateLimitFilter))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Revoke(
         [FromRoute] string actionName,
