@@ -20,7 +20,7 @@ public sealed class RateLimitFilterTests
         new (true, 100, 99, DateTimeOffset.FromUnixTimeSeconds(1_700_000_060), TimeSpan.Zero);
 
     [Fact]
-    public async Task WhenAllowed_PartitionsByResolvedApiKeyId_SetsQuotaHeaders_AndCallsNext()
+    public async Task OnActionExecutionAsync_WhenAllowed_PartitionsByResolvedApiKeyIdAndSetsQuotaHeaders()
     {
         var limiter = new Mock<IRateLimiter>();
         limiter.Setup(l => l.AcquireAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -36,13 +36,13 @@ public sealed class RateLimitFilterTests
         wasCalled().Should().BeTrue();
         context.Result.Should().BeNull();
         limiter.Verify(l => l.AcquireAsync(apiKeyId.ToString(), It.IsAny<CancellationToken>()), Times.Once);
-        http.Response.Headers["X-RateLimit-Limit"].ToString().Should().Be("100");
-        http.Response.Headers["X-RateLimit-Remaining"].ToString().Should().Be("99");
-        http.Response.Headers["X-RateLimit-Reset"].ToString().Should().Be("1700000060");
+        http.Response.Headers[WellKnown.RateLimitHeaders.LIMIT].ToString().Should().Be("100");
+        http.Response.Headers[WellKnown.RateLimitHeaders.REMAINING].ToString().Should().Be("99");
+        http.Response.Headers[WellKnown.RateLimitHeaders.RESET].ToString().Should().Be("1700000060");
     }
 
     [Fact]
-    public async Task WhenRejected_ShortCircuitsWith429_RetryAfter_AndProblemDetails()
+    public async Task OnActionExecutionAsync_WhenRejected_ShortCircuitsWith429AndProblemDetails()
     {
         var rejected = new RateLimitResult(false, 100, 0, DateTimeOffset.UtcNow.AddSeconds(30), TimeSpan.FromSeconds(30));
         var limiter = new Mock<IRateLimiter>();
@@ -65,7 +65,7 @@ public sealed class RateLimitFilterTests
     }
 
     [Fact]
-    public async Task WhenDisabled_PassesThrough_WithoutCallingLimiter()
+    public async Task OnActionExecutionAsync_WhenDisabled_PassesThroughWithoutCallingLimiter()
     {
         var limiter = new Mock<IRateLimiter>();
 
@@ -77,7 +77,7 @@ public sealed class RateLimitFilterTests
 
         wasCalled().Should().BeTrue();
         limiter.Verify(l => l.AcquireAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        http.Response.Headers.Should().NotContainKey("X-RateLimit-Limit");
+        http.Response.Headers.Should().NotContainKey(WellKnown.RateLimitHeaders.LIMIT);
     }
 
     private static RateLimitFilter BuildSut(IRateLimiter limiter, RateLimitSettings? settings = null)

@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using global::Api;
 using global::Application.Infrastructure;
 using global::Application.Interfaces.Services;
+using Domain;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -69,14 +70,18 @@ public sealed class RateLimitEndpointTests : IDisposable
             });
     }
 
-    [Fact]
-    public async Task RateLimitedEndpoint_WhenQuotaExceeded_Returns429WithQuotaHeaders()
+    [Theory]
+    [InlineData("/api/v1/api-key")]
+    [InlineData("/api/v1/api-key/actions")]
+    [InlineData("/api/v1/api-key/status")]
+    [InlineData("/api/v1/api-key/status/history")]
+    public async Task RateLimitedEndpoint_WhenQuotaExceeded_Returns429WithQuotaHeaders(string url)
     {
         using HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
         });
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key");
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
         request.Headers.Add("X-Api-Key", API_KEY_SECRET);
 
@@ -84,8 +89,8 @@ public sealed class RateLimitEndpointTests : IDisposable
 
         response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         response.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(30));
-        response.Headers.GetValues("X-RateLimit-Limit").Should().ContainSingle().Which.Should().Be("100");
-        response.Headers.GetValues("X-RateLimit-Remaining").Should().ContainSingle().Which.Should().Be("0");
+        response.Headers.GetValues(WellKnown.RateLimitHeaders.LIMIT).Should().ContainSingle().Which.Should().Be("100");
+        response.Headers.GetValues(WellKnown.RateLimitHeaders.REMAINING).Should().ContainSingle().Which.Should().Be("0");
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
     }
 
