@@ -1,7 +1,6 @@
 namespace Api.Controllers.V1;
 
 using System.Linq;
-using Api.Controllers;
 using Api.Extensions;
 using Api.Filters;
 using Api.Requests;
@@ -17,7 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 /// <summary>Manages API key lifecycle operations.</summary>
 [ApiVersion(1.0)]
 [Route("api/v{version:apiVersion}/api-key")]
-public sealed class ApiKeyController : Controller
+public sealed class ApiKeyController : Api.Controllers.Controller
 {
     private readonly ICreateApiKeyService _createApiKeyService;
     private readonly IListApiKeysService _listApiKeysService;

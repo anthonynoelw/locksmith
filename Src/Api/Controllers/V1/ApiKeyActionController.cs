@@ -2,7 +2,6 @@ namespace Api.Controllers.V1;
 
 using System.Collections.Generic;
 using System.Linq;
-using Api.Controllers;
 using Api.Extensions;
 using Api.Filters;
 using Api.Requests;
@@ -19,7 +18,7 @@ using Microsoft.AspNetCore.Mvc;
 /// </summary>
 [ApiVersion(1.0)]
 [Route("api/v{version:apiVersion}/api-key")]
-public sealed class ApiKeyActionController : Controller
+public sealed class ApiKeyActionController : Api.Controllers.Controller
 {
     private readonly IListApiKeyActionsService _listApiKeyActionsService;
     private readonly IReplaceApiKeyActionsService _replaceApiKeyActionsService;
