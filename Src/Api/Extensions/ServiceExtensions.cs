@@ -136,6 +136,9 @@ internal static class ServiceExtensions
         // Resolves the X-Api-Key header to a key identity on read endpoints.
         builder.Services.AddScoped<ResolveApiKeyFilter>();
 
+        // Enforces per-API-key rate limiting on the endpoints ResolveApiKeyFilter resolves an identity for.
+        builder.Services.AddScoped<RateLimitFilter>();
+
         return builder;
     }
 }

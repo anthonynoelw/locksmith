@@ -47,6 +47,7 @@ public sealed class ApiKeyStatusController : Api.Controllers.Controller
     /// <returns>200 OK with the current status, or 404 Not Found when the secret is unknown.</returns>
     [HttpGet("status")]
     [ServiceFilter(typeof(ResolveApiKeyFilter))]
+    [ServiceFilter(typeof(RateLimitFilter), Order = 1)]
     [Cacheable]
     [ProducesResponseType(typeof(ApiKeyStatusResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiKeyStatusResponse>> GetCurrentStatus(CancellationToken cancellationToken)
@@ -65,6 +66,7 @@ public sealed class ApiKeyStatusController : Api.Controllers.Controller
     /// <returns>200 OK with the status history, or 404 Not Found when the secret is unknown.</returns>
     [HttpGet("status/history")]
     [ServiceFilter(typeof(ResolveApiKeyFilter))]
+    [ServiceFilter(typeof(RateLimitFilter), Order = 1)]
     [Cacheable]
     [ProducesResponseType(typeof(IReadOnlyList<ApiKeyStatusHistoryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ApiKeyStatusHistoryResponse>>> History(CancellationToken cancellationToken)

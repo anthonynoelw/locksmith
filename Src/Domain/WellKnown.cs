@@ -83,16 +83,6 @@ public static class WellKnown
     }
 
     /// <summary>
-    /// Rate-limiting policy names. Reserved for the future limiter that partitions by the resolved
-    /// API key; not yet wired into a limiter.
-    /// </summary>
-    public static class RateLimitPolicies
-    {
-        /// <summary>Per-API-key rate-limit policy, partitioned by the caller's API key.</summary>
-        public const string PER_API_KEY = "per-api-key";
-    }
-
-    /// <summary>
     /// Caller identities recorded in <c>CreatedBy</c> audit columns. Audit columns are persisted and
     /// exposed in API responses, so they must never contain secrets such as the bearer token itself.
     /// </summary>

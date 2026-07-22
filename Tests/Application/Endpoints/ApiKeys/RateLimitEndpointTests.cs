@@ -12,12 +12,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// HTTP-level tests for the rate limiter. Uses a self-contained factory with a deterministic
-/// <see cref="FakeRateLimiter"/> so the reject path can be exercised without a live Redis or database —
-/// the filter short-circuits before any handler or data access runs.
+/// <see cref="FakeRateLimiter"/> and <see cref="FakeGetApiKeyBySecretService"/> so the reject path can
+/// be exercised without a live Redis or database — the filters short-circuit before any handler or
+/// real data access runs.
 /// </summary>
 public sealed class RateLimitEndpointTests : IDisposable
 {
     private const string BEARER_TOKEN = "test-bearer-token";
+    private const string API_KEY_SECRET = "lk_test-secret";
 
     private readonly WebApplicationFactory<Program> _factory;
 
@@ -52,13 +54,17 @@ public sealed class RateLimitEndpointTests : IDisposable
 
                 builder.ConfigureServices(services =>
                 {
-                    var descriptors = services.Where(d => d.ServiceType == typeof(IRateLimiter)).ToList();
+                    var descriptors = services
+                        .Where(d => d.ServiceType == typeof(IRateLimiter) || d.ServiceType == typeof(IGetApiKeyBySecretService))
+                        .ToList();
                     foreach (ServiceDescriptor descriptor in descriptors)
                     {
                         services.Remove(descriptor);
                     }
 
                     services.AddSingleton<IRateLimiter>(new FakeRateLimiter(rejected));
+                    services.AddSingleton<IGetApiKeyBySecretService>(
+                        new FakeGetApiKeyBySecretService(API_KEY_SECRET, Guid.NewGuid()));
                 });
             });
     }
@@ -70,8 +76,9 @@ public sealed class RateLimitEndpointTests : IDisposable
         {
             AllowAutoRedirect = false,
         });
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{Guid.NewGuid()}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
+        request.Headers.Add("X-Api-Key", API_KEY_SECRET);
 
         HttpResponseMessage response = await client.SendAsync(request);
 
@@ -90,9 +97,9 @@ public sealed class RateLimitEndpointTests : IDisposable
             AllowAutoRedirect = false,
         });
 
-        HttpResponseMessage response = await client.GetAsync($"/api/v1/api-keys/{Guid.NewGuid()}");
+        HttpResponseMessage response = await client.GetAsync("/api/v1/api-key");
 
-        // Authorization runs before the rate-limit filter, so a missing token yields 401, not 429.
+        // Authorization runs before the resolve/rate-limit filters, so a missing token yields 401, not 429.
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 

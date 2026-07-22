@@ -99,10 +99,11 @@ Note: Routes use `/api/v{version}/api-key` (**singular** — not `/api1/keys` or
 ### Rate Limiting
 
 - [x] Redis connection validated in readiness health check (tag: `"ready"`) — `AddRedis(...)` in `AddApiServices`
-- [x] Distributed sliding-window rate limiter — implemented as the `[RateLimit]` MVC action filter (`Api/RateLimiting`) backed by a Redis sorted-set Lua script (`Infrastructure/RateLimiting/RedisSlidingWindowRateLimiter`) behind the `IRateLimiter` abstraction. Keyed **per managed API key** (route `keyId`/`id`, or `HashForLookup` of the body idempotency-key/secret) rather than per caller; `create`/`list` are unthrottled as they target no key. Runs after authentication, so `401`s are never counted. Fails open on Redis outage (configurable)
+- [x] Distributed sliding-window rate limiter — implemented as the `RateLimitFilter` MVC action filter (`Api/Filters`) backed by a Redis sorted-set Lua script (`Infrastructure/RateLimiting/RedisSlidingWindowRateLimiter`) behind the `IRateLimiter` abstraction. Keyed **per resolved API key ID**, read from `HttpContext.Items` after `ResolveApiKeyFilter` runs — applied only to the four `X-Api-Key`-resolved `GET` endpoints (current key, current status, status history, active actions); `idempotencyKey`-identified mutations and the bulk/validate endpoints are not yet covered. Runs after authentication, so `401`s are never counted. Fails open on Redis outage (configurable)
 - [x] Configurable limit and window duration via `RateLimitSettings` (`RateLimiting` config section; defaults 100 requests / 60 seconds) — dedicated options class mirroring `CryptoSettings` rather than folding into `ApiSettings`
 - [x] Return `429 Too Many Requests` with `Retry-After` header (seconds until window resets) as an RFC 9457 ProblemDetails body when limit exceeded
 - [x] `X-RateLimit-*` response headers for current limit, remaining, and reset time (Unix seconds) on every rate-limited response
+- [ ] Extend rate limiting to `idempotencyKey`-identified mutation endpoints (delete/rotate/grant/revoke/replace/update-status) — currently unthrottled; would need a partition source that doesn't depend on an MVC filter resolving identity first, since these endpoints carry no `X-Api-Key` header
 
 ### Tests
 
@@ -119,7 +120,7 @@ Note: HTTP-level tests ended up living in `Tests/Application` (real middleware, 
 - [x] Integration: status get/history/update endpoints — happy path, unknown-id `404`, missing/null-status `422`, and revoked-current-status `409` all covered (`ApiKeyStatusEndpointTests`)
 - [x] Integration: all action management endpoints (happy path + error cases) — list/grant/revoke/replace happy paths, unknown-key `404`, duplicate-grant `409`, invalid-action-name `422`, revoke-not-granted `404`, re-grant-after-revoke, and missing-token `401` all covered (`ApiKeyActionEndpointTests`)
 - [x] Integration: authentication middleware — missing token returns `401`, invalid token returns `401` (`CreateApiKeyAuthorizationTests`, `RetrievalEndpointAuthorizationTests`); valid-token-allows-request is implicitly covered by the happy-path tests on each endpoint
-- [x] Integration: rate limiting — `429` after limit exceeded, with `Retry-After`/`X-RateLimit-*` headers and problem+json body, plus auth-precedes-limiter `401` (`RateLimitEndpointTests`, self-contained factory + `FakeRateLimiter`); real-Redis sliding-window accuracy still relies on a live backend (Unit covers fail-open/closed via `RedisSlidingWindowRateLimiterTests`, filter behavior via `RateLimitFilterTests`)
+- [x] Integration: rate limiting — `429` after limit exceeded, with `Retry-After`/`X-RateLimit-*` headers and problem+json body, plus auth-precedes-limiter `401` (`RateLimitEndpointTests`, self-contained factory + `FakeRateLimiter`/`FakeGetApiKeyBySecretService`); real-Redis sliding-window accuracy still relies on a live backend (Unit covers fail-open/closed via `RedisSlidingWindowRateLimiterTests`, filter behavior via `RateLimitFilterTests`)
 - [ ] Application: full happy-path flow (issue → grant actions → activate → rotate → revoke) — status update now exists (`UpdateApiKeyStatusService`), still blocked on action/rotate/revoke services
 - [ ] Application: key expiry job transitions `Inactive`/`Active` keys to `Expired` — no Agent background job exists yet
 
