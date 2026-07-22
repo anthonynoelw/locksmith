@@ -97,7 +97,7 @@ Content-Type: application/json
 ###
 
 # Grant an action to a key by its idempotency key.
-POST {{Api_HostAddress}}/api/v1/api-key/actions/Write
+POST {{Api_HostAddress}}/api/v1/api-key/actions/{action}
 Authorization: Bearer {{BearerToken}}
 Content-Type: application/json
 
