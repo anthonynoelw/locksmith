@@ -10,7 +10,8 @@ using Domain.Enums;
 using FluentAssertions;
 
 /// <summary>
-/// Integration tests for the /api/v{version}/api-keys/status endpoints.
+/// Integration tests for the /api/v{version}/api-key/status endpoints. Reads are identified by the
+/// X-Api-Key header; the update is identified by the idempotency key in the body.
 /// </summary>
 [Collection("Application")]
 public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : ApplicationTestBase(fixture)
@@ -18,14 +19,11 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task GET_CurrentStatus_WithValidId_Returns200OkWithInactiveStatus()
+    public async Task GET_CurrentStatus_WithValidSecret_Returns200OkWithInactiveStatus()
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/status/{createdKey.Id}");
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
-
-        HttpResponseMessage response = await Client.SendAsync(requestMessage);
+        HttpResponseMessage response = await GetWithApiKeyAsync("/api/v1/api-key/status", createdKey.Secret);
         string body = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -35,12 +33,9 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     }
 
     [Fact]
-    public async Task GET_CurrentStatus_WithUnknownId_Returns404NotFound()
+    public async Task GET_CurrentStatus_WithUnknownSecret_Returns404NotFound()
     {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/status/{Guid.NewGuid()}");
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
-
-        HttpResponseMessage response = await Client.SendAsync(requestMessage);
+        HttpResponseMessage response = await GetWithApiKeyAsync("/api/v1/api-key/status", "lk_nonexistent-secret");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -48,7 +43,7 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     [Fact]
     public async Task GET_CurrentStatus_WithoutBearerToken_Returns401Unauthorized()
     {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/status/{Guid.NewGuid()}");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/status");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
 
@@ -56,16 +51,11 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     }
 
     [Fact]
-    public async Task GET_History_WithValidId_Returns200OkWithSingleInactiveEntry()
+    public async Task GET_History_WithValidSecret_Returns200OkWithSingleInactiveEntry()
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        using var requestMessage = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/api/v1/api-keys/status/{createdKey.Id}/history");
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
-
-        HttpResponseMessage response = await Client.SendAsync(requestMessage);
+        HttpResponseMessage response = await GetWithApiKeyAsync("/api/v1/api-key/status/history", createdKey.Secret);
         string body = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -77,21 +67,11 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
     }
 
     [Fact]
-    public async Task GET_History_WithUnknownId_Returns200OkWithEmptyList()
+    public async Task GET_History_WithUnknownSecret_Returns404NotFound()
     {
-        using var requestMessage = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/api/v1/api-keys/status/{Guid.NewGuid()}/history");
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+        HttpResponseMessage response = await GetWithApiKeyAsync("/api/v1/api-key/status/history", "lk_nonexistent-secret");
 
-        HttpResponseMessage response = await Client.SendAsync(requestMessage);
-        string body = await response.Content.ReadAsStringAsync();
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        List<ApiKeyStatusHistoryResponse>? history = JsonSerializer.Deserialize<List<ApiKeyStatusHistoryResponse>>(
-            body,
-            _jsonOptions);
-        history.Should().BeEmpty();
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -102,9 +82,7 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
         HttpResponseMessage updateResponse = await SendUpdateAsync(createdKey.IdempotencyKey, ApiKeyStatusEnum.Active);
         updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        using var statusMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/status/{createdKey.Id}");
-        statusMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
-        HttpResponseMessage statusResponse = await Client.SendAsync(statusMessage);
+        HttpResponseMessage statusResponse = await GetWithApiKeyAsync("/api/v1/api-key/status", createdKey.Secret);
         string statusBody = await statusResponse.Content.ReadAsStringAsync();
         ApiKeyStatusResponse? status = JsonSerializer.Deserialize<ApiKeyStatusResponse>(statusBody, _jsonOptions);
 
@@ -164,11 +142,11 @@ public sealed class ApiKeyStatusEndpointTests(ApplicationFixture fixture) : Appl
             Encoding.UTF8,
             "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/api-keys/status/update")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/api-key/status")
         {
             Content = content,
         };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
 
         return await Client.SendAsync(requestMessage);
     }

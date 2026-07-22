@@ -17,6 +17,9 @@ public static class WellKnown
 
         /// <summary>The "Cryptography" configuration section (crypto/key-derivation settings).</summary>
         public const string CRYPTOGRAPHY = "Cryptography";
+
+        /// <summary>The "Cache" configuration section (response cache-control durations).</summary>
+        public const string CACHE = "Cache";
     }
 
     /// <summary>
@@ -53,6 +56,37 @@ public static class WellKnown
     {
         /// <summary>Bearer token authentication scheme for static pre-shared token validation.</summary>
         public const string BEARER = "Bearer";
+    }
+
+    /// <summary>
+    /// Well-known custom request header names.
+    /// </summary>
+    public static class RequestHeaders
+    {
+        /// <summary>
+        /// Header carrying the caller's plaintext API key secret. On read (GET) endpoints it identifies
+        /// which API key the request is about; it is also the partition source for future rate limiting.
+        /// </summary>
+        public const string API_KEY = "X-Api-Key";
+    }
+
+    /// <summary>
+    /// Keys used to stash per-request values on <c>HttpContext.Items</c>.
+    /// </summary>
+    public static class HttpContextItems
+    {
+        /// <summary>The identifier of the API key resolved from the <see cref="RequestHeaders.API_KEY"/> header.</summary>
+        public const string RESOLVED_API_KEY_ID = "ResolvedApiKeyId";
+    }
+
+    /// <summary>
+    /// Rate-limiting policy names. Reserved for the future limiter that partitions by the resolved
+    /// API key; not yet wired into a limiter.
+    /// </summary>
+    public static class RateLimitPolicies
+    {
+        /// <summary>Per-API-key rate-limit policy, partitioned by the caller's API key.</summary>
+        public const string PER_API_KEY = "per-api-key";
     }
 
     /// <summary>

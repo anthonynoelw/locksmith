@@ -17,7 +17,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
     [Fact]
     public async Task GET_ListApiKeys_WithoutAuthorizationHeader_Returns401Unauthorized()
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all");
 
         HttpResponseMessage response = await Client.SendAsync(request);
 
@@ -27,7 +27,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
     [Fact]
     public async Task GET_ListApiKeys_WithInvalidBearerToken_Returns401Unauthorized()
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all");
         request.Headers.Authorization = new ("Bearer", "invalid-token");
 
         HttpResponseMessage response = await Client.SendAsync(request);
@@ -38,7 +38,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
     [Fact]
     public async Task GET_ListApiKeys_Unauthorized_ReturnsWWWAuthenticateHeader()
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-keys");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/all");
 
         HttpResponseMessage response = await Client.SendAsync(request);
 
@@ -49,7 +49,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
     [Fact]
     public async Task GET_GetApiKeyById_WithoutAuthorizationHeader_Returns401Unauthorized()
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{Guid.NewGuid()}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key");
 
         HttpResponseMessage response = await Client.SendAsync(request);
 
@@ -59,7 +59,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
     [Fact]
     public async Task GET_GetApiKeyById_WithInvalidBearerToken_Returns401Unauthorized()
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{Guid.NewGuid()}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key");
         request.Headers.Authorization = new ("Bearer", "invalid-token");
 
         HttpResponseMessage response = await Client.SendAsync(request);
@@ -76,7 +76,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/validate")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/validate")
         {
             Content = content,
         };
@@ -95,7 +95,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/validate")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/validate")
         {
             Content = content,
             Headers =
@@ -118,7 +118,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/retrieve-secret")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/secret")
         {
             Content = content,
         };
@@ -137,7 +137,7 @@ public sealed class RetrievalEndpointAuthorizationTests(ApplicationFixture fixtu
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/retrieve-secret")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/secret")
         {
             Content = content,
             Headers =

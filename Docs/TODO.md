@@ -55,7 +55,7 @@ Core functionality and security-critical items required before Locksmith can be 
 - [x] `GetApiKeySecret` service — implemented as `RetrieveSecretService` (hash/compare idempotency key, decrypt and return raw key) plus `ValidateApiKeySecretService` (hash/compare secret, return validity + status)
 - [x] `PatchApiKeyStatus` service — implemented as `UpdateApiKeyStatusService`; resolves the API key via idempotency-key hash lookup (not keyId), soft-deletes the current status (guarding `Revoked`/`Expired`), then appends the new status row
 - [x] `GetApiKeyStatus` service — implemented as `GetApiKeyStatusService` (current status by keyId) and `GetApiKeyStatusHistoryService` (full history by keyId); not in original scope
-- [ ] `RotateApiKey` service — generate new secret, re-encrypt, re-hash, append status row atomically
+- [x] `RotateApiKey` service — implemented as `RotateApiKeyService`: atomically deletes the current key and issues a new one carrying the same active actions (not a re-encrypt-in-place; a delete + create in one transaction)
 - [X] `RevokeApiKey` service — append `Revoked` status row; soft-delete semantics - implemented as `UpdateApiKeyStatusService`;
 - [x] `ListApiKeyActions` service — return active actions (soft-delete filter)
 - [x] `ReplaceApiKeyActions` service — diff current vs. new set; soft-delete removed, insert added
@@ -71,25 +71,25 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### API Endpoints — Key Management
 
-Note: Routes use `/api/v{version}/api-keys` (plural) not `/api/v1/keys`
+Note: Routes use `/api/v{version}/api-key` (**singular** — not `/api1/keys` or the originally scoped `/api-keys` plural). There is no `{keyId}` path segment anywhere; endpoints resolve the target key via either the `X-Api-Key` header (reads) or an `idempotencyKey` in the request body (mutations) — see [api-surface.md](Architecture/api-surface.md#identifying-a-key).
 
-- [x] `POST /api/v{version}/api-keys` — issue a key (calls `CreateApiKeyCommand`); `201` with raw key and idempotency key; `422` on validation failure; requires `[Authorize]`
-- [x] `GET /api/v{version}/api-keys` — list with pagination (`limit`/`offset`); metadata only (not in original scope, added alongside single-key retrieval)
-- [x] `GET /api/v{version}/api-keys/{keyId}` — metadata only (no raw secret); `404` if not found
-- [x] `POST /api/v{version}/api-keys/validate` — validate a presented secret by hash, return `apiKeyId`/`isValid`/status; `404` if secret unknown (not in original scope)
-- [x] `POST /api/v{version}/api-keys/retrieve-secret` — decrypt and return raw key via idempotency-key lookup; `404` if idempotency key not found — implemented as `POST .../retrieve-secret` with the idempotency key in the body rather than the originally scoped `GET .../{keyId}/secret`
-- [x] `GET /api/v{version}/api-keys/status/{id}` — current status metadata by keyId; `404` if no status exists (not in original scope)
-- [x] `GET /api/v{version}/api-keys/status/{id}/history` — full status history by keyId, including soft-deleted entries; empty list if none (not in original scope)
-- [x] `PATCH /api/v{version}/api-keys/status/update` — activate/deactivate/revoke; `409` if current status is `Revoked`/`Expired`; `422` on missing/bad status value; appends `ApiKeyStatus` row — implemented as `PATCH .../status/update` with the idempotency key in the body rather than the originally scoped `PATCH .../{keyId}`
-- [x] `POST /api/v{version}/api-keys/{keyId}/rotate` — new secret, old invalid immediately; `409` if `Revoked`/`Expired`; returns new plaintext secret once
-- [x] `DELETE /api/v{version}/api-keys` — append `Revoked` status; `204` on success; `404` if not found
+- [x] `POST /api/v{version}/api-key` — issue a key (calls `CreateApiKeyCommand`); `201` with raw key and idempotency key; `422` on validation failure; requires `[Authorize]`
+- [x] `GET /api/v{version}/api-key/all` — list with pagination (`limit`/`offset`); metadata only (not in original scope, added alongside single-key retrieval)
+- [x] `GET /api/v{version}/api-key` — current key's metadata only (no raw secret), resolved via `X-Api-Key` header; `400` if header missing/duplicated, `404` if unknown — implemented as the `X-Api-Key`-resolved "current key" route rather than the originally scoped `GET .../{keyId}`
+- [x] `POST /api/v{version}/api-key/validate` — validate a presented secret by hash, return `apiKeyId`/`isValid`; `404` if secret unknown (not in original scope; response dropped `status` from the field list)
+- [x] `POST /api/v{version}/api-key/secret` — decrypt and return raw key via idempotency-key lookup; `404` if idempotency key not found — implemented as `POST .../secret` rather than the originally scoped `GET .../{keyId}/secret`
+- [x] `GET /api/v{version}/api-key/status` — current status, resolved via `X-Api-Key` header; `404` if no status exists (not in original scope)
+- [x] `GET /api/v{version}/api-key/status/history` — full status history, resolved via `X-Api-Key` header, including soft-deleted entries (not in original scope)
+- [x] `PATCH /api/v{version}/api-key/status` — activate/deactivate/revoke by `idempotencyKey`; `409` if current status is `Revoked`/`Expired`; `422` on missing/bad status value; appends `ApiKeyStatus` row — implemented as `PATCH .../status` rather than the originally scoped `PATCH .../{keyId}`
+- [x] `POST /api/v{version}/api-key/rotate` — deletes the current key and issues a new one with the same active actions atomically; `404` if idempotency key unknown; returns new plaintext secret once
+- [x] `DELETE /api/v{version}/api-key` — soft-deletes active status/action/idempotency-key rows by `idempotencyKey`; `204` on success; `404` if not found — the `api_keys` row itself is never deleted
 
 ### API Endpoints — Action Management
 
-- [x] `GET /api/v{version}/api-keys/{keyId}/actions` — list granted actions (soft-delete filter); `404` if key not found
-- [x] `PUT /api/v{version}/api-keys/{keyId}/actions` — replace full action set; diff and soft-delete/insert; `404`/`422` as appropriate; returns the resulting active set
-- [x] `POST /api/v{version}/api-keys/{keyId}/actions/{action}` — grant single action; `201` with the grant; `409` if already actively granted; `422` on invalid action name; `404` if key not found
-- [x] `DELETE /api/v{version}/api-keys/{keyId}/actions/{action}` — soft-delete single action; `204` on success; `404` if key or action not found
+- [x] `GET /api/v{version}/api-key/actions` — list granted actions (soft-delete filter), resolved via `X-Api-Key` header; `404` if key not found
+- [x] `PUT /api/v{version}/api-key/actions` — replace full action set by `idempotencyKey`; diff and soft-delete/insert; `404`/`422` as appropriate; returns the resulting active set
+- [x] `POST /api/v{version}/api-key/actions/{action}` — grant single action by `idempotencyKey`; `201` with the grant (no `Location` header); `409` if already actively granted; `422` on invalid action name; `404` if key not found
+- [x] `DELETE /api/v{version}/api-key/actions/{action}` — soft-delete single action by `idempotencyKey`; `204` on success; `404` if key or action not found
 
 ### Key Expiry (Agent)
 
@@ -113,9 +113,9 @@ Note: HTTP-level tests ended up living in `Tests/Application` (real middleware, 
 - [x] Unit: `CryptoService` — round-trip Encrypt/Decrypt, hash consistency, key derivation with Argon2id
 - [x] Unit: `CreateApiKeyService` — validation (ExpiresAt), key generation, salt derivation, encryption (`Tests/Unit/Services/CreateApiKeyServiceTests.cs`)
 - [x] Unit: idempotency hash matching — verify SHA-256 lookup hash compares correctly (covered via `CryptoServiceTests.HashForLookup_*`)
-- [x] Integration: `POST /api/v{version}/api-keys` — `201` with raw key, idempotency key covered (`CreateApiKeyEndpointTests`); cache headers and idempotency-deduplication-on-retry not yet covered (no dedup cache exists)
-- [x] Integration: `GET /api/v{version}/api-keys/{keyId}` — metadata retrieval; `404` if not found (`GetApiKeyByIdEndpointTests`)
-- [x] Integration: `GET /api/v{version}/api-keys/{keyId}/secret` — covered as `POST .../retrieve-secret` idempotency-key lookup and decryption; `404` if idempotency key not found (`RetrieveSecretEndpointTests`)
+- [x] Integration: `POST /api/v{version}/api-key` — `201` with raw key, idempotency key covered (`CreateApiKeyEndpointTests`); cache headers covered (`ResponseCachingHeaderTests`); idempotency-deduplication-on-retry not covered (no dedup cache exists)
+- [x] Integration: `GET /api/v{version}/api-key` (resolved via `X-Api-Key`) — metadata retrieval; `404` if not found; `400` if header missing (`GetApiKeyByIdEndpointTests`)
+- [x] Integration: `POST /api/v{version}/api-key/secret` — idempotency-key lookup and decryption; `404` if idempotency key not found (`RetrieveSecretEndpointTests`)
 - [x] Integration: status get/history/update endpoints — happy path, unknown-id `404`, missing/null-status `422`, and revoked-current-status `409` all covered (`ApiKeyStatusEndpointTests`)
 - [x] Integration: all action management endpoints (happy path + error cases) — list/grant/revoke/replace happy paths, unknown-key `404`, duplicate-grant `409`, invalid-action-name `422`, revoke-not-granted `404`, re-grant-after-revoke, and missing-token `401` all covered (`ApiKeyActionEndpointTests`)
 - [x] Integration: authentication middleware — missing token returns `401`, invalid token returns `401` (`CreateApiKeyAuthorizationTests`, `RetrievalEndpointAuthorizationTests`); valid-token-allows-request is implicitly covered by the happy-path tests on each endpoint
@@ -148,7 +148,7 @@ Important for production readiness but not blocking initial functionality.
 - [ ] OpenAPI XML comments on all request/response types
 - [ ] Example request/response bodies in OpenAPI via `WithOpenApi()` or schema filters
 - [ ] `ETag` / `Last-Modified` on `GET /api/v1/keys/{keyId}` for conditional reads
-- [ ] Cursor-based list endpoint — `GET /api/v1/keys?ownerId=&cursor=&limit=` for bulk queries (an offset/limit-based `GET /api/v{version}/api-keys` already exists — see Must Have; this item is about moving to cursor pagination and adding `ownerId` filtering)
+- [ ] Cursor-based list endpoint — `GET /api/v1/api-key/all?ownerId=&cursor=&limit=` for bulk queries (an offset/limit-based `GET /api/v{version}/api-key/all` already exists — see Must Have; this item is about moving to cursor pagination and adding `ownerId` filtering)
 
 ### Operations
 

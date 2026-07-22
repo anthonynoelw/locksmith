@@ -2,6 +2,7 @@ namespace Unit.Services.Actions;
 
 using Application.Interfaces;
 using Application.Interfaces.Repositories;
+using Application.Interfaces.Services;
 using Application.Services.Actions;
 using Domain.Enums;
 using Domain.Exceptions;
@@ -14,6 +15,7 @@ public sealed class RevokeApiKeyActionServiceTests
     private readonly Mock<IUnitOfWork> _unitOfWork;
     private readonly Mock<IIdempotencyKeyRepository> _idempotencyKeyRepo;
     private readonly Mock<IApiKeyActionRepository> _actionRepo;
+    private readonly Mock<ICryptoService> _cryptoService;
     private readonly RevokeApiKeyActionService _sut;
 
     public RevokeApiKeyActionServiceTests()
@@ -24,7 +26,11 @@ public sealed class RevokeApiKeyActionServiceTests
         _unitOfWork = new Mock<IUnitOfWork>();
         _unitOfWork.Setup(u => u.ApiKeyActions).Returns(_actionRepo.Object);
 
-        _sut = new RevokeApiKeyActionService(_unitOfWork.Object, _idempotencyKeyRepo.Object);
+        // Identity hashing keeps the raw key equal to the lookup hash the repository is set up against.
+        _cryptoService = new Mock<ICryptoService>();
+        _cryptoService.Setup(c => c.HashForLookup(It.IsAny<string>())).Returns<string>(s => s);
+
+        _sut = new RevokeApiKeyActionService(_unitOfWork.Object, _idempotencyKeyRepo.Object, _cryptoService.Object);
     }
 
     [Fact]
@@ -37,7 +43,7 @@ public sealed class RevokeApiKeyActionServiceTests
             .Setup(r => r.RemoveAsync(apiKeyId, ApiKeyActionEnum.Write, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write);
+        await _sut.ExecuteAsync(idempotencyKeyHash, "Write");
 
         _actionRepo.Verify(
             r => r.RemoveAsync(apiKeyId, ApiKeyActionEnum.Write, It.IsAny<CancellationToken>()),
@@ -54,7 +60,7 @@ public sealed class RevokeApiKeyActionServiceTests
             .Setup(r => r.RemoveAsync(apiKeyId, ApiKeyActionEnum.Write, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write);
+        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, "Write");
 
         await act.Should().ThrowAsync<NotFoundException>();
     }
@@ -67,7 +73,7 @@ public sealed class RevokeApiKeyActionServiceTests
             .Setup(r => r.GetByHashAsync(idempotencyKeyHash, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IdempotencyKey?)null);
 
-        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write);
+        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, "Write");
 
         await act.Should().ThrowAsync<NotFoundException>();
         _actionRepo.Verify(

@@ -4,6 +4,7 @@ using Asp.Versioning;
 
 using Api.Authentication;
 using Api.Exceptions;
+using Api.Filters;
 using Api.OpenApi;
 using Api.Settings;
 using Application.Interfaces.Services;
@@ -33,7 +34,11 @@ internal static class ServiceExtensions
     /// <returns>The same <paramref name="builder"/> instance for chaining.</returns>
     internal static IHostApplicationBuilder AddApiServices(this IHostApplicationBuilder builder)
     {
-        builder.Services.AddControllers();
+        builder.Services.AddControllers(options =>
+        {
+            // Defaults every response to no-store; actions marked [Cacheable] opt into a private cache.
+            options.Filters.Add<ResponseCacheControlFilter>();
+        });
 
         builder.Services
             .AddAuthentication(WellKnown.AuthenticationSchemes.BEARER)
@@ -98,11 +103,18 @@ internal static class ServiceExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        builder.Services
+            .AddOptions<CacheSettings>()
+            .BindConfiguration(WellKnown.ConfigSections.CACHE)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<CryptoSettings>>().Value);
         builder.Services.AddScoped<ICryptoService, CryptoService>();
         builder.Services.AddScoped<ICreateApiKeyService, CreateApiKeyService>();
         builder.Services.AddScoped<IListApiKeysService, ListApiKeysService>();
         builder.Services.AddScoped<IGetApiKeyByIdService, GetApiKeyByIdService>();
+        builder.Services.AddScoped<IGetApiKeyBySecretService, GetApiKeyBySecretService>();
         builder.Services.AddScoped<IValidateApiKeySecretService, ValidateApiKeySecretService>();
         builder.Services.AddScoped<IRetrieveSecretService, RetrieveSecretService>();
         builder.Services.AddScoped<IDeleteApiKeyService, DeleteApiKeyService>();
@@ -114,6 +126,9 @@ internal static class ServiceExtensions
         builder.Services.AddScoped<IReplaceApiKeyActionsService, ReplaceApiKeyActionsService>();
         builder.Services.AddScoped<IGrantApiKeyActionService, GrantApiKeyActionService>();
         builder.Services.AddScoped<IRevokeApiKeyActionService, RevokeApiKeyActionService>();
+
+        // Resolves the X-Api-Key header to a key identity on read endpoints.
+        builder.Services.AddScoped<ResolveApiKeyFilter>();
 
         return builder;
     }

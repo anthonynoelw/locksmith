@@ -9,7 +9,8 @@ using Application.Infrastructure;
 using FluentAssertions;
 
 /// <summary>
-/// Integration tests for the /api/v{version}/api-keys/{keyId}/actions endpoints.
+/// Integration tests for the /api/v{version}/api-key/actions endpoints. The list read is identified
+/// by the X-Api-Key header; mutations are identified by the idempotency key in the body.
 /// </summary>
 [Collection("Application")]
 public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : ApplicationTestBase(fixture)
@@ -17,11 +18,11 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task GET_List_WithValidId_Returns200OkWithSeededActions()
+    public async Task GET_List_WithValidSecret_Returns200OkWithSeededActions()
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync(new[] { 0, 1 });
 
-        HttpResponseMessage response = await SendListAsync(createdKey.Id);
+        HttpResponseMessage response = await SendListAsync(createdKey.Secret);
         string body = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -34,9 +35,9 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     }
 
     [Fact]
-    public async Task GET_List_WithUnknownId_Returns404NotFound()
+    public async Task GET_List_WithUnknownSecret_Returns404NotFound()
     {
-        HttpResponseMessage response = await SendListAsync(Guid.NewGuid());
+        HttpResponseMessage response = await SendListAsync("lk_nonexistent-secret");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -44,9 +45,7 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     [Fact]
     public async Task GET_List_WithoutBearerToken_Returns401Unauthorized()
     {
-        using var requestMessage = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/api/v1/api-keys/{Guid.NewGuid()}/actions");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v1/api-key/actions");
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
 
@@ -58,10 +57,10 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage grantResponse = await SendGrantAsync(createdKey.Id, "Write", createdKey.IdempotencyKey);
+        HttpResponseMessage grantResponse = await SendGrantAsync("Write", createdKey.IdempotencyKey);
         grantResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        HttpResponseMessage listResponse = await SendListAsync(createdKey.Id);
+        HttpResponseMessage listResponse = await SendListAsync(createdKey.Secret);
         string listBody = await listResponse.Content.ReadAsStringAsync();
         List<ApiKeyActionResponse>? actions = JsonSerializer.Deserialize<List<ApiKeyActionResponse>>(
             listBody,
@@ -74,7 +73,7 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage response = await SendGrantAsync(createdKey.Id, "Read", createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendGrantAsync("Read", createdKey.IdempotencyKey);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
@@ -84,7 +83,7 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage response = await SendGrantAsync(createdKey.Id, "not-an-action", createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendGrantAsync("not-an-action", createdKey.IdempotencyKey);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
@@ -95,7 +94,7 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
         // Enum.TryParse would OR "Write,Delete" into 3 == Execute — a privilege escalation.
-        HttpResponseMessage response = await SendGrantAsync(createdKey.Id, "Write,Delete", createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendGrantAsync("Write,Delete", createdKey.IdempotencyKey);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
@@ -105,15 +104,15 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage response = await SendGrantAsync(createdKey.Id, "3", createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendGrantAsync("3", createdKey.IdempotencyKey);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
-    public async Task POST_Grant_WithUnknownKeyId_Returns404NotFound()
+    public async Task POST_Grant_WithUnknownIdempotencyKey_Returns404NotFound()
     {
-        HttpResponseMessage response = await SendGrantAsync(Guid.NewGuid(), "Write", Guid.NewGuid().ToString());
+        HttpResponseMessage response = await SendGrantAsync("Write", Guid.NewGuid().ToString());
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -123,10 +122,10 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage revokeResponse = await SendRevokeAsync(createdKey.Id, "Read", createdKey.IdempotencyKey);
+        HttpResponseMessage revokeResponse = await SendRevokeAsync("Read", createdKey.IdempotencyKey);
         revokeResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        HttpResponseMessage listResponse = await SendListAsync(createdKey.Id);
+        HttpResponseMessage listResponse = await SendListAsync(createdKey.Secret);
         string listBody = await listResponse.Content.ReadAsStringAsync();
         List<ApiKeyActionResponse>? actions = JsonSerializer.Deserialize<List<ApiKeyActionResponse>>(
             listBody,
@@ -139,15 +138,15 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage response = await SendRevokeAsync(createdKey.Id, "Write", createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendRevokeAsync("Write", createdKey.IdempotencyKey);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task DELETE_Revoke_WithUnknownKeyId_Returns404NotFound()
+    public async Task DELETE_Revoke_WithUnknownIdempotencyKey_Returns404NotFound()
     {
-        HttpResponseMessage response = await SendRevokeAsync(Guid.NewGuid(), "Read", Guid.NewGuid().ToString());
+        HttpResponseMessage response = await SendRevokeAsync("Read", Guid.NewGuid().ToString());
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -156,10 +155,10 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     public async Task POST_Grant_AfterRevoke_Returns201Created()
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
-        HttpResponseMessage revokeResponse = await SendRevokeAsync(createdKey.Id, "Read", createdKey.IdempotencyKey);
+        HttpResponseMessage revokeResponse = await SendRevokeAsync("Read", createdKey.IdempotencyKey);
         revokeResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        HttpResponseMessage reGrantResponse = await SendGrantAsync(createdKey.Id, "Read", createdKey.IdempotencyKey);
+        HttpResponseMessage reGrantResponse = await SendGrantAsync("Read", createdKey.IdempotencyKey);
 
         reGrantResponse.StatusCode.Should().Be(HttpStatusCode.Created);
     }
@@ -169,7 +168,7 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage response = await SendReplaceAsync(createdKey.Id, new[] { 1, 2 }, createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendReplaceAsync(new[] { 1, 2 }, createdKey.IdempotencyKey);
         string body = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -186,7 +185,7 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage response = await SendReplaceAsync(createdKey.Id, Array.Empty<int>(), createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendReplaceAsync(Array.Empty<int>(), createdKey.IdempotencyKey);
         string body = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -201,28 +200,23 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
 
-        HttpResponseMessage response = await SendReplaceAsync(createdKey.Id, new[] { 42 }, createdKey.IdempotencyKey);
+        HttpResponseMessage response = await SendReplaceAsync(new[] { 42 }, createdKey.IdempotencyKey);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
-    public async Task PUT_Replace_WithUnknownKeyId_Returns404NotFound()
+    public async Task PUT_Replace_WithUnknownIdempotencyKey_Returns404NotFound()
     {
-        HttpResponseMessage response = await SendReplaceAsync(Guid.NewGuid(), new[] { 0 }, Guid.NewGuid().ToString());
+        HttpResponseMessage response = await SendReplaceAsync(new[] { 0 }, Guid.NewGuid().ToString());
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    private async Task<HttpResponseMessage> SendListAsync(Guid keyId)
-    {
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/api-keys/{keyId}/actions");
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+    private Task<HttpResponseMessage> SendListAsync(string secret)
+        => GetWithApiKeyAsync("/api/v1/api-key/actions", secret);
 
-        return await Client.SendAsync(requestMessage);
-    }
-
-    private async Task<HttpResponseMessage> SendGrantAsync(Guid keyId, string actionName, string idempotencyKey)
+    private async Task<HttpResponseMessage> SendGrantAsync(string actionName, string idempotencyKey)
     {
         using var content = new StringContent(
             JsonSerializer.Serialize(new { idempotencyKey }, _jsonOptions),
@@ -231,16 +225,16 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
 
         using var requestMessage = new HttpRequestMessage(
             HttpMethod.Post,
-            $"/api/v1/api-keys/{keyId}/actions/{actionName}")
+            $"/api/v1/api-key/actions/{actionName}")
         {
             Content = content,
         };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
 
         return await Client.SendAsync(requestMessage);
     }
 
-    private async Task<HttpResponseMessage> SendRevokeAsync(Guid keyId, string actionName, string idempotencyKey)
+    private async Task<HttpResponseMessage> SendRevokeAsync(string actionName, string idempotencyKey)
     {
         using var content = new StringContent(
             JsonSerializer.Serialize(new { idempotencyKey }, _jsonOptions),
@@ -249,27 +243,27 @@ public sealed class ApiKeyActionEndpointTests(ApplicationFixture fixture) : Appl
 
         using var requestMessage = new HttpRequestMessage(
             HttpMethod.Delete,
-            $"/api/v1/api-keys/{keyId}/actions/{actionName}")
+            $"/api/v1/api-key/actions/{actionName}")
         {
             Content = content,
         };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
 
         return await Client.SendAsync(requestMessage);
     }
 
-    private async Task<HttpResponseMessage> SendReplaceAsync(Guid keyId, IReadOnlyList<int> actions, string idempotencyKey)
+    private async Task<HttpResponseMessage> SendReplaceAsync(IReadOnlyList<int> actions, string idempotencyKey)
     {
         using var content = new StringContent(
             JsonSerializer.Serialize(new { idempotencyKey, actions }, _jsonOptions),
             Encoding.UTF8,
             "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/api-keys/{keyId}/actions")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Put, "/api/v1/api-key/actions")
         {
             Content = content,
         };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
 
         return await Client.SendAsync(requestMessage);
     }

@@ -2,6 +2,7 @@ namespace Unit.Services.Actions;
 
 using Application.Interfaces;
 using Application.Interfaces.Repositories;
+using Application.Interfaces.Services;
 using Application.Services.Actions;
 using Domain.Enums;
 using Domain.Exceptions;
@@ -16,6 +17,7 @@ public sealed class GrantApiKeyActionServiceTests
     private readonly Mock<IUnitOfWork> _unitOfWork;
     private readonly Mock<IIdempotencyKeyRepository> _idempotencyKeyRepo;
     private readonly Mock<IApiKeyActionRepository> _actionRepo;
+    private readonly Mock<ICryptoService> _cryptoService;
     private readonly GrantApiKeyActionService _sut;
 
     public GrantApiKeyActionServiceTests()
@@ -26,7 +28,12 @@ public sealed class GrantApiKeyActionServiceTests
         _unitOfWork = new Mock<IUnitOfWork>();
         _unitOfWork.Setup(u => u.ApiKeyActions).Returns(_actionRepo.Object);
 
-        _sut = new GrantApiKeyActionService(_unitOfWork.Object, _idempotencyKeyRepo.Object);
+        // The service hashes the idempotency key before lookup; identity hashing keeps the raw key
+        // equal to the lookup hash the repository is set up against.
+        _cryptoService = new Mock<ICryptoService>();
+        _cryptoService.Setup(c => c.HashForLookup(It.IsAny<string>())).Returns<string>(s => s);
+
+        _sut = new GrantApiKeyActionService(_unitOfWork.Object, _idempotencyKeyRepo.Object, _cryptoService.Object);
     }
 
     [Fact]
@@ -37,7 +44,7 @@ public sealed class GrantApiKeyActionServiceTests
         SetUpIdempotencyKey(idempotencyKeyHash, apiKeyId);
         SetUpExistingActions(apiKeyId);
 
-        await _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write, CREATED_BY);
+        await _sut.ExecuteAsync(idempotencyKeyHash, "Write", CREATED_BY);
 
         _actionRepo.Verify(
             r => r.AddAsync(
@@ -55,7 +62,7 @@ public sealed class GrantApiKeyActionServiceTests
         SetUpIdempotencyKey(idempotencyKeyHash, apiKeyId);
         SetUpExistingActions(apiKeyId);
 
-        ApiKeyAction result = await _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write, CREATED_BY);
+        ApiKeyAction result = await _sut.ExecuteAsync(idempotencyKeyHash, "Write", CREATED_BY);
 
         result.Action.Should().Be(ApiKeyActionEnum.Write);
         result.ApiKeyId.Should().Be(apiKeyId);
@@ -69,7 +76,7 @@ public sealed class GrantApiKeyActionServiceTests
         SetUpIdempotencyKey(idempotencyKeyHash, apiKeyId);
         SetUpExistingActions(apiKeyId, ActionsTestData.BuildAction(apiKeyId, ApiKeyActionEnum.Write));
 
-        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write, CREATED_BY);
+        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, "Write", CREATED_BY);
 
         await act.Should().ThrowAsync<ConflictException>();
         _actionRepo.Verify(r => r.AddAsync(It.IsAny<ApiKeyAction>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -85,7 +92,7 @@ public sealed class GrantApiKeyActionServiceTests
         // A revoked grant is soft-deleted and therefore absent from the active set.
         SetUpExistingActions(apiKeyId);
 
-        await _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write, CREATED_BY);
+        await _sut.ExecuteAsync(idempotencyKeyHash, "Write", CREATED_BY);
 
         _actionRepo.Verify(
             r => r.AddAsync(
@@ -102,10 +109,24 @@ public sealed class GrantApiKeyActionServiceTests
             .Setup(r => r.GetByHashAsync(idempotencyKeyHash, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IdempotencyKey?)null);
 
-        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, ApiKeyActionEnum.Write, CREATED_BY);
+        Func<Task> act = () => _sut.ExecuteAsync(idempotencyKeyHash, "Write", CREATED_BY);
 
         await act.Should().ThrowAsync<NotFoundException>();
         _actionRepo.Verify(r => r.AddAsync(It.IsAny<ApiKeyAction>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("not-an-action")]
+    [InlineData("Write,Delete")]
+    [InlineData("3")]
+    public async Task ExecuteAsync_WithInvalidActionName_ThrowsValidationException(string actionName)
+    {
+        Func<Task> act = () => _sut.ExecuteAsync("any-key", actionName, CREATED_BY);
+
+        await act.Should().ThrowAsync<ValidationException>();
+        _idempotencyKeyRepo.Verify(
+            r => r.GetByHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     private void SetUpIdempotencyKey(string idempotencyKeyHash, Guid apiKeyId)

@@ -20,7 +20,7 @@ public sealed class CreateApiKeyAuthorizationTests(ApplicationFixture fixture) :
         object request = new { actions = new[] { 0 } }; // Read only
         StringContent content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), System.Text.Encoding.UTF8, "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key")
         {
             Content = content,
         };
@@ -36,7 +36,7 @@ public sealed class CreateApiKeyAuthorizationTests(ApplicationFixture fixture) :
         object request = new { actions = new[] { 0 } }; // Read only
         StringContent content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), System.Text.Encoding.UTF8, "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key")
         {
             Content = content,
         };
@@ -53,7 +53,7 @@ public sealed class CreateApiKeyAuthorizationTests(ApplicationFixture fixture) :
         object request = new { actions = new[] { 0 } }; // Read only
         StringContent content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), System.Text.Encoding.UTF8, "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key")
         {
             Content = content,
         };
