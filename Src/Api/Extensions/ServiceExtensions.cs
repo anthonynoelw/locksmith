@@ -103,6 +103,12 @@ internal static class ServiceExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        builder.Services
+            .AddOptions<CacheSettings>()
+            .BindConfiguration(WellKnown.ConfigSections.CACHE)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<CryptoSettings>>().Value);
         builder.Services.AddScoped<ICryptoService, CryptoService>();
         builder.Services.AddScoped<ICreateApiKeyService, CreateApiKeyService>();

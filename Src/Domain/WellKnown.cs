@@ -17,6 +17,9 @@ public static class WellKnown
 
         /// <summary>The "Cryptography" configuration section (crypto/key-derivation settings).</summary>
         public const string CRYPTOGRAPHY = "Cryptography";
+
+        /// <summary>The "Cache" configuration section (response cache-control durations).</summary>
+        public const string CACHE = "Cache";
     }
 
     /// <summary>
@@ -94,15 +97,5 @@ public static class WellKnown
     {
         /// <summary>The identity recorded for requests authenticated with the pre-shared bearer token.</summary>
         public const string API_CLIENT = "api-client";
-    }
-
-    /// <summary>
-    /// Durations, in seconds, for <c>[Cacheable]</c>-marked actions. Their responses vary per caller
-    /// (see <see cref="RequestHeaders.API_KEY"/>), so these are private, per-key cache lifetimes only.
-    /// </summary>
-    public static class CacheDurations
-    {
-        /// <summary>How long a caller's own client may reuse a read-only API key response.</summary>
-        public const int API_KEY_READ_SECONDS = 60;
     }
 }

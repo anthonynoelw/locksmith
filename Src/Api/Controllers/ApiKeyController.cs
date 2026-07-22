@@ -55,7 +55,7 @@ public sealed class ApiKeyController : Controller
     /// <returns>200 OK with the key metadata, or 404 Not Found when the secret is unknown.</returns>
     [HttpGet]
     [ServiceFilter(typeof(ResolveApiKeyFilter))]
-    [Cacheable(WellKnown.CacheDurations.API_KEY_READ_SECONDS)]
+    [Cacheable]
     [ProducesResponseType(typeof(ApiKeyMetadataResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiKeyMetadataResponse>> GetCurrent(CancellationToken cancellationToken)
     {

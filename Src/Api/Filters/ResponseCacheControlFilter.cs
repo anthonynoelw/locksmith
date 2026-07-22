@@ -1,9 +1,11 @@
 namespace Api.Filters;
 
+using Api.Settings;
 using Domain;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 
 /// <summary>
@@ -15,6 +17,15 @@ using Microsoft.Net.Http.Headers;
 public sealed class ResponseCacheControlFilter : IAlwaysRunResultFilter
 {
     private const string NO_STORE = "no-store, no-cache, must-revalidate, max-age=0";
+
+    private readonly CacheSettings _cacheSettings;
+
+    /// <summary>Initializes a new instance of the <see cref="ResponseCacheControlFilter"/> class.</summary>
+    /// <param name="cacheSettings">The configured cache-control durations.</param>
+    public ResponseCacheControlFilter(IOptions<CacheSettings> cacheSettings)
+    {
+        _cacheSettings = cacheSettings.Value;
+    }
 
     /// <summary>
     /// Applies the no-store cache directives to the supplied response headers. Shared with the global
@@ -31,11 +42,10 @@ public sealed class ResponseCacheControlFilter : IAlwaysRunResultFilter
     /// <inheritdoc/>
     public void OnResultExecuting(ResultExecutingContext context)
     {
-        CacheableAttribute? cacheable = IsSuccessResult(context.Result)
-            ? context.ActionDescriptor.EndpointMetadata.OfType<CacheableAttribute>().FirstOrDefault()
-            : null;
+        bool isCacheable = IsSuccessResult(context.Result)
+            && context.ActionDescriptor.EndpointMetadata.OfType<CacheableAttribute>().Any();
 
-        if (cacheable is null)
+        if (!isCacheable)
         {
             ApplyNoStore(context.HttpContext.Response.Headers);
             return;
@@ -44,7 +54,7 @@ public sealed class ResponseCacheControlFilter : IAlwaysRunResultFilter
         // The response varies per caller: the same URL returns different data depending on which API
         // key's secret is presented, so any cache (including a shared/browser one) must key on it too
         // — otherwise it could serve one caller's data to a different caller entirely.
-        context.HttpContext.Response.Headers[HeaderNames.CacheControl] = $"private, max-age={cacheable.MaxAgeSeconds}";
+        context.HttpContext.Response.Headers[HeaderNames.CacheControl] = $"private, max-age={_cacheSettings.ApiKeyReadSeconds}";
         context.HttpContext.Response.Headers[HeaderNames.Vary] = WellKnown.RequestHeaders.API_KEY;
     }
 

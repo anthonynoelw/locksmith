@@ -4,9 +4,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Api.Responses;
+using Api.Settings;
 using Application.Infrastructure;
 using Domain;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 /// <summary>
 /// Verifies response cache-control directives: no-store for endpoints that mutate state or return
@@ -66,6 +69,7 @@ public sealed class ResponseCachingHeaderTests(ApplicationFixture fixture) : App
     public async Task GET_CacheableEndpoint_Response_IsPrivateCacheableAndVariesByApiKey(string url)
     {
         CreateApiKeyResponse createdKey = await CreateApiKeyAsync();
+        int expectedMaxAge = Services.GetRequiredService<IOptions<CacheSettings>>().Value.ApiKeyReadSeconds;
 
         HttpResponseMessage response = await GetWithApiKeyAsync(url, createdKey.Secret);
 
@@ -73,7 +77,7 @@ public sealed class ResponseCachingHeaderTests(ApplicationFixture fixture) : App
         response.Headers.CacheControl.Should().NotBeNull();
         response.Headers.CacheControl!.NoStore.Should().BeFalse();
         response.Headers.CacheControl.Private.Should().BeTrue();
-        response.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromSeconds(WellKnown.CacheDurations.API_KEY_READ_SECONDS));
+        response.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromSeconds(expectedMaxAge));
         response.Headers.Vary.Should().Contain(WellKnown.RequestHeaders.API_KEY);
     }
 
