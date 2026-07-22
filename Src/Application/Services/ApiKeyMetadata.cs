@@ -36,7 +36,9 @@ internal static class ApiKeyMetadataMapper
     /// <returns>The masked, resolved metadata.</returns>
     public static ApiKeyMetadata ToMetadata(ApiKey apiKey)
     {
+        // Deleting an API key soft-deletes every status row, so a deleted key has none left here.
         ApiKeyStatus? currentStatus = apiKey.Statuses
+            .Where(s => s.DeletedAt == null)
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefault();
 

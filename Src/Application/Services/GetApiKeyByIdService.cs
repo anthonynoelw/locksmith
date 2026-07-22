@@ -22,7 +22,9 @@ public sealed class GetApiKeyByIdService : IGetApiKeyByIdService
     {
         ApiKey? apiKey = await _unitOfWork.ApiKeys.GetByIdAsync(id, cancellationToken);
 
-        if (apiKey is null)
+        // A key always gets an initial status row at creation, so having none left that are not
+        // soft-deleted only happens once the key itself has been deleted.
+        if (apiKey is null || apiKey.Statuses.All(s => s.DeletedAt is not null))
         {
             throw new NotFoundException($"API key with ID {id} not found.");
         }

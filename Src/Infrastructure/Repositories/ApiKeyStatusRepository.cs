@@ -32,16 +32,19 @@ public sealed class ApiKeyStatusRepository(AppDbContext db) : IApiKeyStatusRepos
             .ToListAsync(ct);
 
     /// <summary>
-    /// Gets the current (most recent) status for an API Key.
+    /// Gets the current (most recent, non-deleted) status for an API Key.
     /// </summary>
     /// <param name="apiKeyId">The API Key identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The most recent status record; null if no status history exists.</returns>
+    /// <returns>
+    /// The most recent non-deleted status record; null if no status history exists or the API key has
+    /// been deleted (which soft-deletes every status).
+    /// </returns>
     public async Task<ApiKeyStatus?> GetCurrentStatusAsync(
         Guid apiKeyId,
         CancellationToken ct = default) =>
         await db.ApiKeyStatuses
-            .Where(s => s.ApiKeyId == apiKeyId)
+            .Where(s => s.ApiKeyId == apiKeyId && s.DeletedAt == null)
             .OrderByDescending(s => s.CreatedAt)
             .AsNoTracking()
             .FirstOrDefaultAsync(ct);
