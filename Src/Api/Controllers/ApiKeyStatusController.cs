@@ -7,6 +7,7 @@ using Api.Filters;
 using Api.Requests;
 using Api.Responses;
 using Application.Interfaces.Services.Status;
+using Domain;
 using Domain.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,7 @@ public sealed class ApiKeyStatusController : Controller
     /// <returns>200 OK with the current status, or 404 Not Found when the secret is unknown.</returns>
     [HttpGet("status")]
     [ServiceFilter(typeof(ResolveApiKeyFilter))]
+    [Cacheable(WellKnown.CacheDurations.API_KEY_READ_SECONDS)]
     [ProducesResponseType(typeof(ApiKeyStatusResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiKeyStatusResponse>> GetCurrentStatus(CancellationToken cancellationToken)
     {
@@ -61,6 +63,7 @@ public sealed class ApiKeyStatusController : Controller
     /// <returns>200 OK with the status history, or 404 Not Found when the secret is unknown.</returns>
     [HttpGet("status/history")]
     [ServiceFilter(typeof(ResolveApiKeyFilter))]
+    [Cacheable(WellKnown.CacheDurations.API_KEY_READ_SECONDS)]
     [ProducesResponseType(typeof(IReadOnlyList<ApiKeyStatusHistoryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ApiKeyStatusHistoryResponse>>> History(CancellationToken cancellationToken)
     {

@@ -49,6 +49,7 @@ public sealed class ApiKeyActionController : Controller
     /// <returns>200 OK with the active actions, or 404 Not Found when the secret is unknown.</returns>
     [HttpGet("actions")]
     [ServiceFilter(typeof(ResolveApiKeyFilter))]
+    [Cacheable(WellKnown.CacheDurations.API_KEY_READ_SECONDS)]
     [ProducesResponseType(typeof(IReadOnlyList<ApiKeyActionResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ApiKeyActionResponse>>> List(CancellationToken cancellationToken)
     {

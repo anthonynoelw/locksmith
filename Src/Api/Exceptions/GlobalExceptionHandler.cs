@@ -82,9 +82,9 @@ public sealed class GlobalExceptionHandler(
         httpContext.Response.StatusCode = problemDetails.Status!.Value;
 
         // Error responses are produced in middleware, outside the MVC result pipeline, so the
-        // NoStoreResponseFilter never runs for them. Stamp the same directives here so the no-store
-        // guarantee is universal.
-        NoStoreResponseFilter.ApplyNoStore(httpContext.Response.Headers);
+        // ResponseCacheControlFilter never runs for them. Stamp the same directives here so errors are
+        // never cached, even for endpoints whose successful responses are.
+        ResponseCacheControlFilter.ApplyNoStore(httpContext.Response.Headers);
 
         await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {

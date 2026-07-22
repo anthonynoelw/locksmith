@@ -36,8 +36,8 @@ internal static class ServiceExtensions
     {
         builder.Services.AddControllers(options =>
         {
-            // The API deals only in API key material and its metadata; no response may be cached.
-            options.Filters.Add<NoStoreResponseFilter>();
+            // Defaults every response to no-store; actions marked [Cacheable] opt into a private cache.
+            options.Filters.Add<ResponseCacheControlFilter>();
         });
 
         builder.Services
