@@ -20,7 +20,7 @@ Located in `Src/Domain/`. Contains business entities and domain logic with **zer
 - **Entities:** `ApiKey`, `ApiKeyStatus`, `ApiKeyAction`, `IdempotencyKey` — all four implement `IAppendOnlyTable` (see [The data model](#the-data-model))
 - **Enums:** `ApiKeyStatusEnum` (`Inactive`, `Active`, `Revoked`, `Expired`), `ApiKeyActionEnum` (`Read`, `Write`, `Delete`, `Execute`)
 - **Exceptions:** `NotFoundException`, `ValidationException`, `ConflictException`, `DecryptionFailedException`, `AppendOnlyViolationException` — mapped to HTTP status codes by the Api layer (except `AppendOnlyViolationException`, which indicates an internal invariant violation and falls through to `500`)
-- **Constants:** `WellKnown` — config section names, connection string keys, health check tags, auth scheme names, request header names, `HttpContext.Items` keys, rate-limit policy names, caller identities, and cache durations, all in one place to avoid magic strings
+- **Constants:** `WellKnown` — config section names, connection string keys, health check tags, auth scheme names, request header names, `HttpContext.Items` keys, rate-limit response header names, caller identities, and cache durations, all in one place to avoid magic strings
 - **Settings classes:** `ApiSettings`, `AgentSettings` (in their respective projects) and `CryptoSettings` (in Application) — configuration POCOs with validation attributes
 
 This layer is pure .NET. It knows nothing about databases, HTTP, or external services.
@@ -494,6 +494,6 @@ What data never leaves the server? What is the attack surface?
 
 - Every versioned endpoint requires a valid bearer token; the four `X-Api-Key`-resolved reads require that header too.
 - Every response carries an explicit cache directive — no response is cacheable by accident.
-- Rate limiting is designed (`WellKnown.RateLimitPolicies.PER_API_KEY`) but not yet wired into a limiter.
+- The four `X-Api-Key`-resolved reads are rate limited per API key via a Redis-backed sliding window (`RateLimitFilter`);
 
 For threat-specific analysis, see [Security/threat-model.md](../Security/threat-model.md).

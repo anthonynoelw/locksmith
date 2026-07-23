@@ -1,6 +1,6 @@
 # What is Locksmith?
 
-Locksmith is a self-contained REST API service that manages the full lifecycle of API keys for internal services. Its job is simple to state: create API keys securely, control what those keys are allowed to do, and activate, rotate, and revoke them over time — while maintaining a permanent, tamper-evident audit trail of every state change. Today it covers all of that: creation, listing, secret validation and retrieval, status transitions (activate/deactivate/revoke), rotation, deletion, and per-key permission management. See [api-surface.md](Architecture/api-surface.md) for the exact endpoints, and [TODO.md](TODO.md) for what's still outstanding (mainly rate limiting and an automated expiry job).
+Locksmith is a self-contained REST API service that manages the full lifecycle of API keys for internal services. Its job is simple to state: create API keys securely, control what those keys are allowed to do, and activate, rotate, and revoke them over time — while maintaining a permanent, tamper-evident audit trail of every state change. Today it covers all of that: creation, listing, secret validation and retrieval, status transitions (activate/deactivate/revoke), rotation, deletion, and per-key permission management. See [api-surface.md](Architecture/api-surface.md) for the exact endpoints, and [TODO.md](TODO.md) for what's still outstanding (mainly an automated expiry job and rate limiting on mutation endpoints).
 
 ## The problem it solves
 
@@ -63,7 +63,7 @@ The following capabilities are designed but not yet built — see [TODO.md](TODO
 - Automated key expiry — an Agent background job that transitions keys to `Expired` once `expiresAt` has passed; today expiry only happens if a caller sets it manually via `PATCH /api-key/status`
 
 **Operational capabilities**
-- Rate limiting enforced at the middleware layer, per resolved API key (the identity-resolution plumbing already exists; no limiter is wired in yet)
+- Rate limiting on the `idempotencyKey`-identified mutation endpoints — the four `X-Api-Key`-resolved reads are already limited per key via a Redis-backed sliding window
 - OpenTelemetry traces and metrics
 - CORS configuration for cross-origin callers
 

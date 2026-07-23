@@ -2,7 +2,7 @@
 
 Locksmith is a REST API for managing the full lifecycle of API keys: issuance, listing, validation, secret retrieval, status transitions (activate/deactivate/revoke), rotation, deletion, and permission (action) management. It is called by a single trusted internal service that uses the keys it receives to authenticate its own downstream consumers. This document covers every implemented endpoint: the request shape, all possible responses, and how errors are returned. The only pieces still missing are listed at the end so this document never claims more than what exists.
 
-Quick links: [Authentication](#authentication) · [Identifying a key](#identifying-a-key) · [Response caching](#response-caching) · [Key states](#key-states) · [Key management](#key-management) · [Key status](#key-status) · [Key actions](#key-actions) · [Infrastructure](#infrastructure) · [Error responses](#error-responses) · [Happy-path flow](#happy-path-flow) · [Not yet implemented](#not-yet-implemented)
+Quick links: [Authentication](#authentication) · [Identifying a key](#identifying-a-key) · [Response caching](#response-caching) · [Rate limiting](#rate-limiting) · [Key states](#key-states) · [Key management](#key-management) · [Key status](#key-status) · [Key actions](#key-actions) · [Infrastructure](#infrastructure) · [Error responses](#error-responses) · [Happy-path flow](#happy-path-flow) · [Not yet implemented](#not-yet-implemented)
 
 ---
 
@@ -48,6 +48,31 @@ Every response carries an explicit `Cache-Control` directive — there is no unm
 - **`[Cacheable(60)]` actions:** `Cache-Control: private, max-age=60` and `Vary: X-Api-Key`. Applied only to the four `X-Api-Key`-resolved `GET` endpoints (current key, current status, status history, active actions) — their response depends on which key's secret was presented, so any cache must key on that header too.
 
 `GET .../all` (the bulk admin listing) is **not** cacheable — it isn't scoped to a single caller's key.
+
+---
+
+## Rate limiting
+
+Two partitioning strategies cover different endpoint shapes:
+
+| Filter | Partition key | Applied to |
+|---|---|---|
+| `RateLimitFilter` | The API key ID `ResolveApiKeyFilter` resolved earlier in the same action's filter pipeline (must run after it) | The four `X-Api-Key`-resolved `GET` endpoints (current key, current status, status history, active actions) |
+| `CredentialRateLimitFilter` | A hash (`ICryptoService.HashForLookup`) of the bound request body's `idempotencyKey` or `secret` — the same hash the corresponding DB lookup uses, so no extra round trip is needed just to rate limit | Every `idempotencyKey`/secret-identified mutation: retrieve secret, validate, rotate, delete, replace actions, grant action, revoke action, update status |
+
+`create` and `list all` remain unthrottled — they target no existing key, so neither filter has anything to partition on.
+
+A distributed sliding-window limiter (`RedisSlidingWindowRateLimiter`), keyed per partition in Redis, enforces the quota correctly across multiple API instances. Configurable via the `RateLimiting` section (`RateLimitSettings`): `Enabled`, `PermitLimit`, `WindowSeconds`, and `FailOpen` (whether requests pass through when Redis is unavailable; defaults to `true`).
+
+Every rate-limited response carries:
+
+| Header | Meaning |
+|---|---|
+| `X-RateLimit-Limit` | Requests permitted per window |
+| `X-RateLimit-Remaining` | Requests left in the current window |
+| `X-RateLimit-Reset` | Unix time (seconds) the window resets |
+
+**Response 429** — quota exceeded. RFC 9457 `ProblemDetails` (`title: "Too Many Requests"`) plus a `Retry-After` header (seconds).
 
 ---
 
@@ -560,7 +585,6 @@ All error responses follow [RFC 9457 ProblemDetails](https://www.rfc-editor.org/
 
 ## Not yet implemented
 
-- **Rate limiting** — `WellKnown.RateLimitPolicies.PER_API_KEY` and the `X-Api-Key`-resolved identity it would partition on already exist (`ResolveApiKeyFilter`, `Controller.cs`), but no limiter is wired in yet. Redis is connected and checked in `/health/ready`, but not yet used for limiting.
 - **`Idempotency-Key` request-deduplication semantics** — a client-supplied header with `409` on replay-with-different-body. Distinct from the idempotency key Locksmith itself generates and returns at creation, which is fully implemented and used throughout this document.
 - **Agent expiry job** — nothing currently transitions a key to `Expired` automatically; `PATCH .../status` can still be used to set it manually.
 
