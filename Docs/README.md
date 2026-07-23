@@ -1,6 +1,6 @@
 # Locksmith — Documentation Index
 
-Locksmith is a self-contained ASP.NET Core REST API for secure API key lifecycle management. Today it issues, lists, validates, and retrieves API keys, hashing secrets with SHA-256 for lookup and encrypting them at rest with AES-256-GCM under a per-key Argon2id-derived DEK. Rotation, revocation, and per-key rate limiting are designed but not yet implemented — see [TODO.md](TODO.md).
+Locksmith is a self-contained ASP.NET Core REST API for secure API key lifecycle management. It issues, lists, validates, retrieves, rotates, and deletes API keys, drives them through a status lifecycle (activate/deactivate/revoke), and manages per-key action permissions — hashing secrets with SHA-256 for lookup and encrypting them at rest with AES-256-GCM under a per-key Argon2id-derived DEK. Per-key rate limiting covers its four `X-Api-Key`-resolved read endpoints; rate limiting on mutations and an automated expiry job are designed but not yet implemented — see [TODO.md](TODO.md).
 
 ### Where to look for what
 

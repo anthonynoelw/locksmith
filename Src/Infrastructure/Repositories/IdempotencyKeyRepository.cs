@@ -15,7 +15,7 @@ public sealed class IdempotencyKeyRepository(AppDbContext db) : IIdempotencyKeyR
         await db.IdempotencyKeys
             .Include(e => e.ApiKey)
             .AsNoTracking()
-            .FirstOrDefaultAsync(e => e.IdempotencyKeyHash == idempotencyKeyHash, ct);
+            .FirstOrDefaultAsync(e => e.IdempotencyKeyHash == idempotencyKeyHash && e.DeletedAt == null, ct);
 
     /// <inheritdoc/>
     public async Task AddAsync(IdempotencyKey idempotencyKey, CancellationToken ct = default)

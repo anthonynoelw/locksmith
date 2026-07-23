@@ -17,6 +17,12 @@ public static class WellKnown
 
         /// <summary>The "Cryptography" configuration section (crypto/key-derivation settings).</summary>
         public const string CRYPTOGRAPHY = "Cryptography";
+
+        /// <summary>The "Cache" configuration section (response cache-control durations).</summary>
+        public const string CACHE = "Cache";
+
+        /// <summary>The "RateLimiting" configuration section (per-API-key rate limiter settings).</summary>
+        public const string RATE_LIMITING = "RateLimiting";
     }
 
     /// <summary>
@@ -56,6 +62,27 @@ public static class WellKnown
     }
 
     /// <summary>
+    /// Well-known custom request header names.
+    /// </summary>
+    public static class RequestHeaders
+    {
+        /// <summary>
+        /// Header carrying the caller's plaintext API key secret. On read (GET) endpoints it identifies
+        /// which API key the request is about; it is also the partition source for future rate limiting.
+        /// </summary>
+        public const string API_KEY = "X-Api-Key";
+    }
+
+    /// <summary>
+    /// Keys used to stash per-request values on <c>HttpContext.Items</c>.
+    /// </summary>
+    public static class HttpContextItems
+    {
+        /// <summary>The identifier of the API key resolved from the <see cref="RequestHeaders.API_KEY"/> header.</summary>
+        public const string RESOLVED_API_KEY_ID = "ResolvedApiKeyId";
+    }
+
+    /// <summary>
     /// Caller identities recorded in <c>CreatedBy</c> audit columns. Audit columns are persisted and
     /// exposed in API responses, so they must never contain secrets such as the bearer token itself.
     /// </summary>
@@ -63,5 +90,21 @@ public static class WellKnown
     {
         /// <summary>The identity recorded for requests authenticated with the pre-shared bearer token.</summary>
         public const string API_CLIENT = "api-client";
+    }
+
+    /// <summary>
+    /// Response header names emitted by the rate limiter to communicate the current quota state.
+    /// Set on every rate-limited response; <c>Retry-After</c> is added alongside these on a 429.
+    /// </summary>
+    public static class RateLimitHeaders
+    {
+        /// <summary>The maximum number of requests permitted within the current window.</summary>
+        public const string LIMIT = "X-RateLimit-Limit";
+
+        /// <summary>The number of requests remaining in the current window.</summary>
+        public const string REMAINING = "X-RateLimit-Remaining";
+
+        /// <summary>The Unix time (seconds) at which the current window resets.</summary>
+        public const string RESET = "X-RateLimit-Reset";
     }
 }

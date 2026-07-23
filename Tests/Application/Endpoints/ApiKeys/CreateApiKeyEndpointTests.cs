@@ -22,7 +22,7 @@ public sealed class CreateApiKeyEndpointTests(ApplicationFixture fixture) : Appl
         object request = new { actions = new[] { 0, 1 } }; // Read=0, Write=1
         StringContent content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), System.Text.Encoding.UTF8, "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key")
         {
             Content = content,
         };
@@ -39,7 +39,7 @@ public sealed class CreateApiKeyEndpointTests(ApplicationFixture fixture) : Appl
         object request = new { actions = new[] { 0 } }; // Read only
         StringContent content = new StringContent(JsonSerializer.Serialize(request, _jsonOptions), System.Text.Encoding.UTF8, "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key")
         {
             Content = content,
         };

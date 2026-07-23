@@ -16,28 +16,32 @@
 |----|-------------|-------|
 | ED-1 | HTTP port exposed from the Docker container (`:8080`) — the only network ingress point | Untrusted; all traffic is authenticated at the application layer |
 | ED-2 | PostgreSQL — stores API key hashes, salts, state history, and action assignments | Trusted infrastructure; access must be limited to the Locksmith container only |
-| ED-3 | Redis — planned; used for caching and rate-limit counters | Trusted infrastructure; no raw secrets stored |
+| ED-3 | Redis — used for caching and rate-limit counters | Trusted infrastructure; no raw secrets stored |
 | ED-4 | Seq — structured log aggregation; receives all application log output | Trusted infrastructure; logs must never contain raw secrets or raw API keys |
 
 ---
 
 ## Entry Points
 
-Implemented today:
+Implemented today. Note there is no `{id}` path segment anywhere — reads that target a specific key resolve it via the caller-presented secret in an `X-Api-Key` header; mutations resolve it via an `idempotencyKey` in the request body. See [api-surface.md](../Architecture/api-surface.md#identifying-a-key).
 
 | ID | Name | Description | Trust Level |
 |----|------|-------------|-------------|
-| EP-1 | `POST /api/v{n}/api-keys` | Creates a new API key record; returns the raw secret and an idempotency key in the response | TL-2 (authenticated management caller) |
-| EP-2 | `GET /api/v{n}/api-keys` | Returns paginated key metadata | TL-2 |
-| EP-3 | `GET /api/v{n}/api-keys/{id}` | Returns metadata for a single key | TL-2 |
-| EP-4 | `POST /api/v{n}/api-keys/retrieve-secret` | Returns the raw key value, decrypted via the idempotency key in the request body | TL-2 |
-| EP-5 | `POST /api/v{n}/api-keys/validate` | Hashes a presented secret and reports whether it's known and its current status; does not return the raw secret | TL-2 |
-| EP-6 | `GET /health` | Liveness probe; no authentication required | TL-1 (unauthenticated) |
-| EP-7 | `GET /health/ready` | Readiness probe; no authentication required | TL-1 (unauthenticated) |
+| EP-1 | `POST /api/v{n}/api-key` | Creates a new API key record; returns the raw secret and an idempotency key in the response | TL-2 (authenticated management caller) |
+| EP-2 | `GET /api/v{n}/api-key/all` | Returns paginated key metadata for all keys | TL-2 |
+| EP-3 | `GET /api/v{n}/api-key` | Returns metadata for the key identified by `X-Api-Key` | TL-2 + key secret |
+| EP-4 | `POST /api/v{n}/api-key/secret` | Returns the raw key value, decrypted via the idempotency key in the request body | TL-2 |
+| EP-5 | `POST /api/v{n}/api-key/validate` | Hashes a presented secret and reports whether it's known and currently `Active`; does not return the raw secret | TL-2 |
+| EP-6 | `POST /api/v{n}/api-key/rotate` | Atomically deletes the current key and issues a replacement with the same active actions; returns the new raw secret | TL-2 |
+| EP-7 | `DELETE /api/v{n}/api-key` | Soft-deletes a key's status, action, and idempotency-key records, retiring it | TL-2 |
+| EP-8 | `GET`/`PATCH /api/v{n}/api-key/status[/history]` | Reads or transitions a key's lifecycle status | TL-2 (+ key secret for the `GET` routes) |
+| EP-9 | `GET`/`PUT`/`POST`/`DELETE /api/v{n}/api-key/actions[/{action}]` | Reads or changes a key's granted permissions | TL-2 (+ key secret for the `GET` route) |
+| EP-10 | `GET /health` | Liveness probe; no authentication required | TL-1 (unauthenticated) |
+| EP-11 | `GET /health/ready` | Readiness probe; no authentication required | TL-1 (unauthenticated) |
 
-All management entry points (EP-1 through EP-5) require `Authorization: Bearer <secret>` with constant-time comparison (`CryptographicOperations.FixedTimeEquals`).
+All management entry points (EP-1 through EP-9) require `Authorization: Bearer <secret>` with constant-time comparison (`CryptographicOperations.FixedTimeEquals`). EP-3 and the `GET` routes under EP-8/EP-9 additionally require a valid `X-Api-Key` header carrying the target key's own raw secret — a caller can read a key's own metadata/status/actions without knowing its idempotency key, but the secret itself is the credential being checked. Those same four `X-Api-Key`-resolved `GET` routes are rate limited per key via a Redis-backed sliding window (`RateLimitFilter`); every `idempotencyKey`/secret-identified mutation is rate limited the same way, partitioned instead on a hash of the request-body credential (`CredentialRateLimitFilter`). Only `create` and `list all` are unthrottled, since neither targets an existing key.
 
-Planned, not yet implemented — no attack surface exists for these yet, listed here so the threat model doesn't need re-deriving when they land: `PATCH /api/v{n}/api-keys/{id}` (activate/deactivate), `POST /api/v{n}/api-keys/{id}/rotate`, `DELETE /api/v{n}/api-keys/{id}` (revoke), and the `/actions` grant/revoke/list/replace endpoints. See [TODO.md](../TODO.md).
+Planned, not yet implemented — no attack surface exists for this yet: client-supplied `Idempotency-Key` request-deduplication semantics. See [TODO.md](../TODO.md).
 
 ---
 
@@ -45,10 +49,10 @@ Planned, not yet implemented — no attack surface exists for these yet, listed 
 
 | ID | Name | Description | Trust Level |
 |----|------|-------------|-------------|
-| XP-1 | HTTP response body | Returns key metadata, status codes, and RFC 9457 ProblemDetails on error | TL-2 — raw key returned on EP-1 (creation) and EP-4 (retrieval); both must travel over TLS |
+| XP-1 | HTTP response body | Returns key metadata, status codes, and RFC 9457 ProblemDetails on error | TL-2 — raw key returned on EP-1 (creation), EP-4 (retrieval), and EP-6 (rotation); all must travel over TLS |
 | XP-2 | PostgreSQL writes | Persists key hash, salt, state transitions, action assignments, and audit fields | TL-3 (infrastructure) |
 | XP-3 | Seq log events | Structured logs enriched with request context; must never include raw keys or secrets | TL-3 (infrastructure) |
-| XP-4 | Redis writes | Planned rate-limit counters and cache entries; no raw secrets | TL-3 (infrastructure) |
+| XP-4 | Redis writes | Rate-limit counters and cache entries; no raw secrets | TL-3 (infrastructure) |
 
 ---
 
@@ -90,8 +94,8 @@ Planned, not yet implemented — no attack surface exists for these yet, listed 
 | Information Disclosure | The management bearer token (A-1) appears in structured log output, unhandled exception messages, or environment dumps and is exfiltrated via Seq or a log export. | Serilog must use destructuring policies that redact the `Authorization` header value. `GlobalExceptionHandler` strips exception details from 500 responses outside the Development environment. The bearer token must never be written to any log sink. |
 | Information Disclosure | The data encryption key (A-7) is compromised — for example, committed to source control, logged, or leaked from the secrets manager — allowing an attacker who also has database read access to decrypt all stored raw API keys at once. | The DEK must be stored in a secrets manager or HSM, never in source control or alongside the database. The DEK and the database credentials must not share the same secret store entry. Rotation of the DEK requires re-encrypting all stored keys. |
 | Information Disclosure | API key hashes and salts (A-3) are extracted from PostgreSQL by an attacker who gains database access (e.g., via SQL injection in a future endpoint or direct DB access). | Hashes are produced with a secure algorithm (e.g., PBKDF2 or Argon2) with per-key salts, making offline cracking computationally expensive. Input validation via `FluentValidation` (planned) prevents SQL injection vectors into EF Core queries. |
-| Information Disclosure | A management endpoint returns key metadata (status, actions) to an unauthenticated caller, leaking the existence of a key. | All management endpoints (EP-1 through EP-5) are gated behind bearer-token middleware. The handler is never reached without a valid token. Health probes (EP-6, EP-7) return no sensitive data. |
-| Denial of Service | An attacker floods the management endpoints with requests, exhausting the connection pool, database connections, or compute resources. | Rate limiting (planned — Redis-backed sliding window). Container resource limits in Docker Compose. Liveness probe (EP-6) performs no dependency checks, remaining fast regardless of backing-store health. |
+| Information Disclosure | A management endpoint returns key metadata (status, actions) to an unauthenticated caller, leaking the existence of a key. | All management endpoints (EP-1 through EP-9) are gated behind bearer-token middleware. The handler is never reached without a valid token; the `X-Api-Key`-resolved routes additionally require the target key's own secret. Health probes (EP-10, EP-11) return no sensitive data. |
+| Denial of Service | An attacker floods the management endpoints with requests, exhausting the connection pool, database connections, or compute resources. | Rate limiting (Redis-backed sliding window) covers every EP-1–EP-9 endpoint except `create`/`list all`: the four `X-Api-Key`-resolved reads are partitioned by resolved API key, and every `idempotencyKey`/secret-identified mutation is partitioned by a hash of the request-body credential. Container resource limits in Docker Compose. Liveness probe (EP-10) performs no dependency checks, remaining fast regardless of backing-store health. |
 | Denial of Service | An attacker sends oversized request bodies to creation or update endpoints, exhausting memory or triggering excessive allocations. | ASP.NET Core default request body size limit applies. Plan to add a per-endpoint limit appropriate for key management payloads (a few KB). |
 | Elevation of Privilege | An unauthenticated caller bypasses the bearer-token check and reaches a management handler — for example, due to a misconfigured middleware order or a route that falls outside the auth policy. | Authentication middleware runs before any controller dispatch (enforced by `UseApiPipeline` ordering). All management routes inherit from the base `Controller` class which carries the versioned route prefix. Health probes are explicitly exempted by route, not by a wildcard bypass. |
 | Elevation of Privilege | A bug in idempotency-key processing allows a replayed creation or rotation request to produce a second key for the same idempotency key, effectively doubling access. | Idempotency keys are stored and checked before execution; a duplicate key returns the original response without re-executing the operation (planned: EF Core unique index on `IdempotencyKey`). |
@@ -110,8 +114,8 @@ flowchart LR
     subgraph Docker Network
         subgraph Locksmith API
             M[Bearer Token\nMiddleware]
-            H[Management\nHandlers\nEP-1 to EP-5]
-            HP[Health Probes\nEP-6, EP-7]
+            H[Management\nHandlers\nEP-1 to EP-9]
+            HP[Health Probes\nEP-10, EP-11]
         end
 
         DB[(PostgreSQL\nApiKeys / ApiKeyStatus\n/ ApiKeyAction)]

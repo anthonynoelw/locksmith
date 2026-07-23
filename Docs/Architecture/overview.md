@@ -1,6 +1,8 @@
 # Locksmith — Architecture Overview
 
-Locksmith is an ASP.NET Core 10 REST API that manages the full lifecycle of API keys: issuance, state transitions, rotation, and revocation. It exists to solve the problem of centralized, auditable API key management — so internal services don't have to implement their own inconsistent security mechanisms.
+Locksmith is an ASP.NET Core 10 REST API that manages the full lifecycle of API keys: issuance, listing, secret validation and retrieval, status transitions (activate/deactivate/revoke), rotation, deletion, and per-key action (permission) management. It exists to solve the problem of centralized, auditable API key management — so internal services don't have to implement their own inconsistent security mechanisms.
+
+For the exact request/response shape of every endpoint, see [api-surface.md](api-surface.md).
 
 ## How Locksmith is organized
 
@@ -15,10 +17,11 @@ Domain ← Application ← Infrastructure ← Api
 
 Located in `Src/Domain/`. Contains business entities and domain logic with **zero external dependencies**.
 
-- **Entities:** `ApiKey`, `ApiKeyStatus`, `ApiKeyAction`, `IdempotencyKey`
-- **Exceptions:** `NotFoundException`, `ValidationException`, `ConflictException` — mapped to HTTP status codes by the Api layer
-- **Constants:** `WellKnown.ConfigSections`, `WellKnown.HealthCheckTags`
-- **Settings classes:** `ApiSettings`, `CryptoSettings`, `AgentSettings` — configuration POCOs with validation attributes
+- **Entities:** `ApiKey`, `ApiKeyStatus`, `ApiKeyAction`, `IdempotencyKey` — all four implement `IAppendOnlyTable` (see [The data model](#the-data-model))
+- **Enums:** `ApiKeyStatusEnum` (`Inactive`, `Active`, `Revoked`, `Expired`), `ApiKeyActionEnum` (`Read`, `Write`, `Delete`, `Execute`)
+- **Exceptions:** `NotFoundException`, `ValidationException`, `ConflictException`, `DecryptionFailedException`, `AppendOnlyViolationException` — mapped to HTTP status codes by the Api layer (except `AppendOnlyViolationException`, which indicates an internal invariant violation and falls through to `500`)
+- **Constants:** `WellKnown` — config section names, connection string keys, health check tags, auth scheme names, request header names, `HttpContext.Items` keys, rate-limit response header names, caller identities, and cache durations, all in one place to avoid magic strings
+- **Settings classes:** `ApiSettings`, `AgentSettings` (in their respective projects) and `CryptoSettings` (in Application) — configuration POCOs with validation attributes
 
 This layer is pure .NET. It knows nothing about databases, HTTP, or external services.
 
@@ -26,36 +29,42 @@ This layer is pure .NET. It knows nothing about databases, HTTP, or external ser
 
 Located in `Src/Application/`. Contains use cases and application services.
 
-- **Services:** `CreateApiKeyService`, `ListApiKeysService`, `GetApiKeyByIdService`, `ValidateApiKeySecretService`, `RetrieveSecretService` — business logic that orchestrates across repositories. No FluentValidation validators exist yet; validation is inline in the services (e.g. `ExpiresAt` checked in `CreateApiKeyService`).
-- **Interfaces:** `IApiKeyRepository`, `IUnitOfWork`, `ICryptoService` — contracts for infrastructure concerns
-- **DTOs and request/response models** — application-level data contracts
+- **Key management services:** `CreateApiKeyService`, `ListApiKeysService`, `GetApiKeyByIdService`, `GetApiKeyBySecretService`, `ValidateApiKeySecretService`, `RetrieveSecretService`, `RotateApiKeyService`, `DeleteApiKeyService`
+- **Status services** (`Services/Status/`): `GetApiKeyStatusService`, `GetApiKeyStatusHistoryService`, `UpdateApiKeyStatusService`
+- **Action services** (`Services/Actions/`): `ListApiKeyActionsService`, `ReplaceApiKeyActionsService`, `GrantApiKeyActionService`, `RevokeApiKeyActionService`, plus the internal `ApiKeyActionParser` (exact, case-insensitive name matching — rejects the numeric and comma-list values `Enum.TryParse` would otherwise accept)
+- No FluentValidation validators exist; validation is inline in services (e.g. `ExpiresAt` in `CreateApiKeyService`) or via `[Required]`/`[RegularExpression]` on the request records in Api
+- **Interfaces:** `IApiKeyRepository`, `IApiKeyStatusRepository`, `IApiKeyActionRepository`, `IIdempotencyKeyRepository`, `IUnitOfWork`, `ICryptoService` — contracts for infrastructure concerns
+- **Commands/DTOs:** `CreateApiKeyCommand`/`CreateApiKeyResult`, `ApiKeyMetadata` (+ `ApiKeyMetadataMapper`), and per-service result records
 
 ### Infrastructure
 
 Located in `Src/Infrastructure/`. Implements the interfaces defined in Application, and manages all external concerns.
 
-- **EF Core context:** `AppDbContext` with entity configurations
-- **Repositories:** `ApiKeyRepository`, `ApiKeyStatusRepository`, etc. — query filters exclude soft-deleted rows automatically
-- **Unit of Work:** manages transaction scope across multiple repositories
-- **External services:** Redis cache client, health check implementations
+- **EF Core context:** `AppDbContext` with entity configurations, including the append-only guard (see [The data model](#the-data-model))
+- **Repositories:** `ApiKeyRepository`, `ApiKeyStatusRepository`, `ApiKeyActionRepository`, `IdempotencyKeyRepository` — reads filter out soft-deleted rows where the domain requires "currently active" semantics; history reads intentionally don't
+- **Unit of Work:** `UnitOfWork` manages transaction scope across multiple repositories (`ExecuteInTransactionAsync`)
+- **External services:** Redis distributed cache client, EF Core + Redis readiness health checks
 - **Migrations:** Entity Framework schema migrations
 
 ### Api
 
 Located in `Src/Api/`. ASP.NET Core entry point. Hosts HTTP endpoints and orchestrates the request-to-response pipeline.
 
-- **Controllers:** inherit from `Src/Api/Controllers/Controller.cs` which carries the versioned route template (`/api/v{version}/`)
-- **Global exception handler:** catches domain exceptions, converts to RFC 9457 ProblemDetails
-- **Middleware:** Serilog request logging, authorization, health checks
+- **Controllers:** `ApiKeyController`, `ApiKeyStatusController`, `ApiKeyActionController`, versioned under `Src/Api/Controllers/V1/` with an explicit `[ApiVersion(1.0)]` attribute — all inherit from `Src/Api/Controllers/Controller.cs`, which carries the versioned route template (`/api/v{version:apiVersion}/[controller]`) and `[Authorize]`; each controller overrides the route to `api/v{version:apiVersion}/api-key` so all three share the same base path
+- **Authentication:** `BearerTokenAuthenticationHandler` — a custom `AuthenticationHandler<T>` that validates the static bearer token with constant-time comparison
+- **`ResolveApiKeyFilter`:** an `IAsyncActionFilter` that resolves the `X-Api-Key` header to a key identity for the four read endpoints that need it (see [api-surface.md](api-surface.md#identifying-a-key))
+- **`ResponseCacheControlFilter`:** an `IAlwaysRunResultFilter` that stamps `no-store` on every response by default, or a short private cache on actions marked `[Cacheable]` (see [api-surface.md](api-surface.md#response-caching))
+- **Global exception handler:** `GlobalExceptionHandler` catches domain exceptions, converts to RFC 9457 ProblemDetails
+- **Middleware:** Serilog request logging, authentication/authorization, health checks
 - **OpenAPI:** automatic OpenAPI document generation (`/openapi/v1.json`) plus a [Scalar](https://scalar.com/) UI (`/scalar/v1`) in Development environment
 
 ### Agent
 
 Located in `Src/Agent/`. Separate Worker Service executable — runs background jobs and scheduled tasks.
 
-- **Worker service:** implements `IHostedService` for recurring operations
-- **Shared infrastructure:** reuses repositories, DbContext, and services from Infrastructure layer
-- **Independent startup:** wires services independently from Api; both read the same configuration
+- **Worker service:** `Worker` implements `BackgroundService`/`IHostedService`. It currently only logs on startup and performs no periodic work — the key-expiry polling job described in [TODO.md](../TODO.md) isn't implemented yet.
+- **Shared infrastructure:** reuses repositories, `AppDbContext`, and Infrastructure services via the same `AddInfrastructure()` extension the Api project calls
+- **Independent startup:** wires services independently from Api (`AddAgentServices()`); both read the same configuration
 
 **Key distinction:** Api and Agent are separate entry points that share domain/infrastructure logic but have different purposes.
 
@@ -65,15 +74,17 @@ Located in `Src/Agent/`. Separate Worker Service executable — runs background 
 
 When an HTTP request arrives at the Api, it travels through this pipeline (in `UseApiPipeline()`):
 
-1. **Serilog request logging** — captures timestamp, HTTP method, path, query string, request headers
+1. **Serilog request logging** — captures timestamp, HTTP method, path, query string, request headers; wraps the full pipeline so it can log the final status code even for exception-mapped responses
 2. **Global exception handler** — wraps downstream execution; catches domain exceptions and converts them to ProblemDetails
 3. **OpenAPI middleware** (Development only) — serves the OpenAPI document at `/openapi/v1.json` and a Scalar UI at `/scalar/v1`
-4. **HTTPS redirect** — upgrades HTTP to HTTPS in non-Development environments
-5. **Authorization middleware** — validates `Authorization: Bearer <token>` header using constant-time comparison; returns `401` on invalid token
-6. **Controller routing** — matches request to a controller action based on route template and HTTP method
-7. **Action execution** — controller calls application service, which uses repositories to query/mutate data
-8. **Response serialization** — result is serialized to JSON and returned
-9. **Health check endpoints** — special-case unversioned routes (`/health`, `/health/ready`) that don't require authorization
+4. **HTTPS redirect** — upgrades HTTP to HTTPS
+5. **Authentication middleware** — `BearerTokenAuthenticationHandler` validates `Authorization: Bearer <token>` using constant-time comparison
+6. **Authorization middleware** — enforces `[Authorize]` on the base `Controller` class; returns `401` on missing/invalid token
+7. **Controller routing** — matches request to a controller action based on route template and HTTP method
+8. **Action filters** — `ResolveApiKeyFilter` (on the four `X-Api-Key`-based reads) resolves the caller's key identity onto `HttpContext.Items`; `ResponseCacheControlFilter` (registered globally) stamps cache headers on the way out
+9. **Action execution** — controller calls an application service, which uses repositories (via `IUnitOfWork`) to query/mutate data
+10. **Response serialization** — result is serialized to JSON and returned
+11. **Health check endpoints** — special-case unversioned routes (`/health`, `/health/ready`) that don't require authentication and sit outside the versioned controller routes
 
 ### What happens to domain exceptions
 
@@ -81,11 +92,14 @@ If an application service throws a domain exception, the global exception handle
 
 | Exception | HTTP Status | When |
 |---|---|---|
-| `NotFoundException` | 404 | Resource doesn't exist |
+| `NotFoundException` | 404 | Resource doesn't exist (unknown secret, unknown idempotency key, action not granted) |
 | `ValidationException` | 422 | Request body failed validation; includes field-level errors |
-| `ConflictException` | 409 | State transition not allowed, or idempotency key already used (reserved — no current endpoint throws this yet) |
+| `ConflictException` | 409 | Status transition attempted from a terminal state, or an action already actively granted |
 | `DecryptionFailedException` | 422 | Stored ciphertext failed to decrypt (thrown by `RetrieveSecretService`) |
+| `AppendOnlyViolationException` | 500 | Code attempted to update or delete an append-only entity — an internal bug, not a client error |
 | (unhandled) | 500 | Any other exception; detail is redacted outside Development |
+
+The `X-Api-Key`-missing case (`400`) is produced directly by `ResolveApiKeyFilter` as a `BadRequestObjectResult`, not by `GlobalExceptionHandler` — it never throws, so it isn't in this table.
 
 Example validation error response:
 ```json
@@ -116,7 +130,7 @@ curl http://localhost:5000/health
 
 ### Readiness: `GET /health/ready`
 
-Runs checks tagged `"ready"` (EF Core database, Redis cache). Returns `Healthy` only when all dependencies are reachable. Use this for Kubernetes readiness probes.
+Runs checks tagged `"READY"` (EF Core database, Redis cache). Returns `Healthy` only when all dependencies are reachable. Use this for Kubernetes readiness probes.
 
 ```bash
 # When ready
@@ -141,14 +155,27 @@ curl http://localhost:5000/health/ready
 Locksmith uses URL-segment versioning. All endpoints live under `/api/v{version}/`:
 
 ```
-POST /api/v1/api-keys
-GET /api/v1/api-keys/{keyId}
-PATCH /api/v1/api-keys/{keyId}
+POST   /api/v1/api-key
+GET    /api/v1/api-key
+GET    /api/v1/api-key/all
+POST   /api/v1/api-key/validate
+POST   /api/v1/api-key/secret
+POST   /api/v1/api-key/rotate
+DELETE /api/v1/api-key
+GET    /api/v1/api-key/status
+GET    /api/v1/api-key/status/history
+PATCH  /api/v1/api-key/status
+GET    /api/v1/api-key/actions
+PUT    /api/v1/api-key/actions
+POST   /api/v1/api-key/actions/{actionName}
+DELETE /api/v1/api-key/actions/{actionName}
 ```
 
-The base controller at `Src/Api/Controllers/Controller.cs` carries the route template; all controllers inherit from it. Each API version can have its own OpenAPI document via `ApiVersionDocumentTransformer`, browsable through the Scalar UI at `/scalar/v1`.
+Note the route is singular — `api-key`, not `api-keys` or `keys` — and there is no `{id}` path segment; see [Identifying a key](api-surface.md#identifying-a-key) in the API surface doc for how each endpoint resolves the target key instead.
 
-To add a new version, create a new controller that inherits from the base and override the route if needed. Old versions remain in the codebase until explicitly removed.
+The base controller at `Src/Api/Controllers/Controller.cs` carries `[Authorize]` and the versioned route template; each of the three controllers (`ApiKeyController`, `ApiKeyStatusController`, `ApiKeyActionController`), living under `Src/Api/Controllers/V1/` and decorated with `[ApiVersion(1.0)]`, overrides the route to the shared `api/v{version:apiVersion}/api-key` prefix. Each API version can have its own OpenAPI document via `ApiVersionDocumentTransformer`, browsable through the Scalar UI at `/scalar/v1`.
+
+To add a new version, create a `V2` controller folder/namespace with `[ApiVersion(2.0)]` on each controller, register a new `AddOpenApi("v2", ...)` call in `ServiceExtensions.AddApiServices()`, and add versioned controller actions. Old versions remain in the codebase until explicitly removed.
 
 ---
 
@@ -158,41 +185,59 @@ All settings use the `IOptions<T>` pattern with validation that runs at startup 
 
 ### How configuration works
 
-1. Settings live in `Src/<Project>/Settings/` as POCOs with validation attributes:
+1. Settings live in `Src/<Project>/Settings/` (or `Src/Application/Settings/` for `CryptoSettings`) as POCOs with validation attributes:
 
 ```csharp
-public class ApiSettings
+public sealed class ApiSettings
 {
-    [Required]
-    public string BearerToken { get; set; }
+    [Required, StringLength(256, MinimumLength = 1)]
+    public required string Name { get; init; }
 
-    [Range(1, 1000)]
-    public int CryptoIterations { get; set; }
+    [Required, StringLength(256, MinimumLength = 1)]
+    public required string BearerToken { get; init; }
 }
 ```
 
-2. In `Program.cs`, they're bound from `appsettings.json`:
+2. In `AddApiServices()` (`Src/Api/Extensions/ServiceExtensions.cs`), they're bound from `appsettings.json`:
 
 ```csharp
 builder.Services
     .AddOptions<ApiSettings>()
-    .BindConfiguration(WellKnown.ConfigSections.Api)
+    .BindConfiguration(WellKnown.ConfigSections.API)
     .ValidateDataAnnotations()
     .ValidateOnStart();
 ```
 
-3. Any controller or service that needs the settings requests `IOptions<ApiSettings>` via constructor injection.
+3. Any controller or service that needs the settings requests `IOptions<ApiSettings>` (or, for `CryptoSettings`, the plain class — it's registered as a singleton instance, not wrapped in `IOptions<T>`) via constructor injection.
 
 ### Configuration section names
 
-All configuration section names are constants in `Domain/WellKnown.ConfigSections` to avoid magic strings:
+All configuration section name constants are centralized in `Domain.WellKnown.ConfigSections` to avoid magic strings:
 
 ```csharp
 public static class ConfigSections
 {
-    public const string Api = "Api";
-    public const string Cryptography = "Cryptography";
-    public const string Agent = "Agent";
+    public const string API = "API";
+    public const string AGENT = "AGENT";
+    public const string CRYPTOGRAPHY = "Cryptography";
+}
+```
+
+Configuration binding is case-insensitive, so `appsettings.json` spells these `"Api"`, `"Agent"`, and `"Cryptography"` — matching the constant's *value*, not necessarily its casing.
+
+`CryptoSettings` (Argon2id tuning) is a separate settings class in `Application/Settings/`, bound to the `Cryptography` section:
+
+```csharp
+public sealed class CryptoSettings
+{
+    [Range(1, 10)]
+    public int DegreeOfParallelism { get; init; } = 1;
+
+    [Range(65536, 1048576)]
+    public int MemorySize { get; init; } = 65536;
+
+    [Range(5, 100)]
+    public int Iterations { get; init; } = 8;
 }
 ```
 
@@ -240,176 +285,152 @@ Example `appsettings.Development.json`:
 
 ## Service registration pattern
 
-Two extension methods on `IHostApplicationBuilder` keep `Program.cs` clean:
+Extension methods on `IHostApplicationBuilder` keep `Program.cs` clean:
 
-### `AddApiServices()` — Api-specific wiring
-
-Registers:
-- Controllers and routing
-- API versioning
-- OpenAPI document generation + Scalar UI configuration
-- Global exception handler
-- Health checks (with `"ready"` tags for EF Core and Redis)
-- ProblemDetails formatting
-
-### `AddAgentServices()` — Agent-specific wiring
+### `AddApiServices()` — Api-specific wiring (`Src/Api/Extensions/ServiceExtensions.cs`)
 
 Registers:
-- Background `Worker` as `IHostedService`
-- Scheduled job configurations
+- Controllers, `ResponseCacheControlFilter`, and `ResolveApiKeyFilter`
+- Bearer token authentication scheme and API versioning
+- Version-aware OpenAPI document generation
+- `ApiSettings` and `CryptoSettings` options binding
+- Every key/status/action application service
+- Global exception handler and ProblemDetails formatting (including a custom `InvalidModelStateResponseFactory` so model-binding failures return the same 422 shape as domain validation errors)
+- Health checks (EF Core + Redis, tagged `"READY"`)
 
-### Both call `AddInfrastructureServices()`
+### `AddAgentServices()` — Agent-specific wiring (`Src/Agent/Extensions/ServiceExtensions.cs`)
 
-Registered in shared extension method in Infrastructure layer:
-- EF Core `DbContext`
-- Repositories
-- Unit of Work
-- Redis cache client
-- Crypto service
+Registers:
+- `Worker` as a hosted service
+- `AgentSettings` options binding
+
+### Both call `AddInfrastructure()`
+
+Registered in a shared extension method in the Infrastructure layer (`Src/Infrastructure/Extensions/ServiceExtensions.cs`):
+- EF Core `AppDbContext` (Npgsql)
+- `IUnitOfWork` and all four repositories
+- Redis distributed cache + `IConnectionMultiplexer`
 
 ### Middleware pipeline via `UseApiPipeline()`
 
-Extension method on `WebApplication` applies the request pipeline in order:
-- Serilog request logging
-- Exception handler
-- OpenAPI document + Scalar UI (Development)
-- HTTPS redirect
-- Authorization middleware
-- Controller routing
-- Health check endpoints
+Extension method on `WebApplication` (`Src/Api/Extensions/PipelineExtensions.cs`) applies the request pipeline in order — see [How a request flows through Locksmith](#how-a-request-flows-through-locksmith) above.
 
 ---
 
 ## The data model
 
-Locksmith stores four entity types with specific constraints to preserve audit history and enable efficient lookups.
+Locksmith stores four entity types with specific constraints to preserve audit history and enable efficient lookups. See [database.md](database.md) for the full schema reference.
 
 ### `ApiKey` — the core entity
 
 ```
 id: GUID (primary key)
-secret: string (AES-256-GCM ciphertext)
+secret: string (AES-256-GCM ciphertext, base64)
 secretHash: string (unique index)
 createdAt: DateTime
 createdBy: string
 expiresAt: DateTime
 ```
 
-There is no `ownerId` field — the entity has no concept of a key owner today. The key record itself is never updated or deleted. State changes are tracked in a separate `ApiKeyStatus` table.
+There is no `ownerId` field — the entity has no concept of a key owner today. There is also no `DeletedAt` — unlike the other three entities, `ApiKey` can never be soft-deleted, only ever inserted. "Deleting" a key ([`DELETE .../api-key`](api-surface.md#delete-a-key)) soft-deletes its statuses, actions, and idempotency records instead, leaving the `ApiKey` row itself as a permanent, unreachable anchor.
 
 ### `ApiKeyStatus` — append-only state history
 
 ```
 id: GUID (primary key)
 apiKeyId: GUID (foreign key)
-status: enum (Inactive, Active, Revoked, Expired)
+status: enum (Inactive|Active|Revoked|Expired)
 createdAt: DateTime
-deletedAt: DateTime (soft delete)
+createdBy: string
+deletedAt: DateTime? (soft delete)
 ```
-
-**Append-only enforcement:** configured with `HasNoKey()` — the context cannot issue `UPDATE` or `DELETE` on this table. Every state change is a new row. Full history is always available for audit.
 
 ### `ApiKeyAction` — permissions junction table
 
 ```
 id: GUID (primary key)
 apiKeyId: GUID (foreign key)
-action: enum (Read, Write, Delete, Execute)
+action: enum (Read|Write|Delete|Execute)
 createdAt: DateTime
-deletedAt: DateTime (soft delete)
+createdBy: string
+deletedAt: DateTime? (soft delete)
 ```
 
-Permissions are stored separately so they can be granted or revoked independently of key state. Soft deletes preserve the record of when a permission was revoked.
+A partial unique index on `(ApiKeyId, Action)` (filtered to non-deleted rows) guarantees at most one active grant per action per key — the authoritative guard against concurrent duplicate grants.
 
-### `IdempotencyKey` — secret retrieval, not request deduplication
+### `IdempotencyKey` — secret retrieval and mutation targeting
 
 ```
 id: GUID (primary key)
 apiKeyId: GUID (foreign key)
 idempotencyKeyHash: string (unique index)
-salt: string (base64, Argon2id salt for the DEK)
+salt: string (base64, random — the Argon2id salt for the DEK)
 createdAt: DateTime
 createdBy: string
-deletedAt: DateTime (soft delete)
+deletedAt: DateTime? (soft delete)
 ```
 
-Despite the name, this table does not currently deduplicate retried requests. It stores the salt needed to re-derive the per-key DEK, so that a caller who saved the idempotency key returned at creation can later call `POST /api-keys/retrieve-secret` to decrypt and re-fetch the raw secret. There is no `cachedResponse` field and no request-level dedup cache yet — see [api-surface.md](api-surface.md#planned-endpoints-not-yet-implemented).
+Every mutating endpoint except create and validate resolves its target key through this table, by hashing the caller-supplied `idempotencyKey` and looking up the matching row (see [Identifying a key](api-surface.md#identifying-a-key)). It also stores the salt needed to re-derive the per-key DEK for `POST .../api-key/secret`.
 
-### Query filters
+### Append-only enforcement
 
-Repositories automatically exclude soft-deleted rows. The EF Core context has query filters on entities with a `DeletedAt` column:
-
-```csharp
-modelBuilder.Entity<ApiKeyStatus>()
-    .HasQueryFilter(x => x.DeletedAt == null);
-```
-
-This means queries are safe by default — you don't have to remember to filter out deleted rows.
+All four entities implement `Domain.IAppendOnlyTable`. Enforcement is **application-layer**, in `AppDbContext.SaveChanges`/`SaveChangesAsync`: before delegating to EF Core, it walks the change tracker and throws `AppendOnlyViolationException` if any `IAppendOnlyTable` entity is `Deleted`, or if any is `Modified` with a change to any property other than `DeletedAt`. This is one guard shared by all four tables — not a per-table `HasNoKey()` configuration — and it's why soft-deleting via `DeletedAt` is always allowed but every other kind of update or a hard delete is not, even for `ApiKey`, which has no `DeletedAt` at all and so can never be touched again after insert.
 
 ---
 
 ## Cryptography and key management
 
-Locksmith implements multiple layers of cryptographic security. See [ADR-002](../Decisions/ADR-002-api-key-creation.md) for the full design rationale.
+Locksmith implements multiple layers of cryptographic security in `CryptoService`. See [ADR-002](../Decisions/ADR-002-api-key-creation.md) for the full design rationale.
 
 ### Key generation
 
-Raw API key secrets are generated using `RandomNumberGenerator.GetBytes()` — cryptographically random, not pseudo-random.
-
 ```csharp
-var secret = RandomNumberGenerator.GetBytes(32); // 256 bits
-var base64Secret = Convert.ToBase64String(secret);
+byte[] idempotencyKeyBytes = RandomNumberGenerator.GetBytes(96); // base64url-encoded
+byte[] secretBytes = RandomNumberGenerator.GetBytes(32);          // "lk_" + base64url-encoded
 ```
 
-This raw secret is returned to the caller exactly once. It is **never** logged and **never** persisted in plaintext.
+Both the idempotency key and the API key secret are cryptographically random, base64url-encoded (no padding). The secret is prefixed `lk_`. Both are returned to the caller exactly once, at creation (or rotation), and are **never** logged.
 
-### Hashing for deduplication
+### Hashing for lookup
 
-Idempotency keys are hashed with SHA-256 (no salt) for fast lookup deduplication:
+The same routine hashes both the API key secret (for the `SecretHash` unique index) and the idempotency key (for the `IdempotencyKeyHash` unique index) — SHA-256, base64-encoded, no salt:
 
 ```csharp
-var hash = SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyKey));
-var hexHash = Convert.ToHexString(hash).ToLower();
+byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+string hashForLookup = Convert.ToBase64String(hash);
 ```
 
-This allows O(1) lookup: present the idempotency key → hash it → query the database for that hash → if found, return cached response.
+This gives O(1) equality lookups on both unique indexes.
 
 ### Encryption at rest
 
-Raw API key secrets are encrypted with **AES-256-GCM** using a derived encryption key (DEK):
+Raw API key secrets are encrypted with **AES-256-GCM** using a per-key data encryption key (DEK) derived from the *plaintext idempotency key itself* — not a separate master secret:
 
-1. **DEK derivation:** Argon2id KDF derives a unique DEK per key from a master salt:
+1. **DEK derivation:** at creation, a random 32-byte salt is generated and stored on the `IdempotencyKey` row. Argon2id derives the DEK from the plaintext idempotency key (as the password) and that salt:
    ```csharp
-   var dek = Argon2id.ComputeHash(
-       password: masterSalt,
-       salt: perKeySalt,
-       iterations: settings.Iterations,
-       memorySize: settings.MemorySize,
-       parallelism: settings.Parallelism
-   );
+   using var argon2 = new Argon2id(Encoding.UTF8.GetBytes(idempotencyKey))
+   {
+       Salt = salt,
+       DegreeOfParallelism = settings.DegreeOfParallelism,
+       MemorySize = settings.MemorySize,
+       Iterations = settings.Iterations,
+   };
+   byte[] dek = argon2.GetBytes(32);
    ```
+2. **Encryption:** AES-256-GCM encrypts the raw secret with a random 12-byte nonce and a 16-byte tag; `nonce || ciphertext || tag` is base64-encoded and stored as `ApiKey.Secret`.
+3. **Retrieval:** `POST .../api-key/secret` re-derives the DEK from the caller-supplied idempotency key and the stored salt, then decrypts. Presenting the wrong idempotency key derives the wrong DEK, which fails AES-GCM's authentication tag check and surfaces as `DecryptionFailedException` → `422`.
 
-2. **Encryption:** AES-256-GCM encrypts the raw secret:
-   ```csharp
-   var (ciphertext, nonce, tag) = AesGcm.Encrypt(plaintext: secret, dek);
-   ```
-
-3. **Storage:** ciphertext, nonce, and tag are stored in the database. The raw secret is discarded.
-
-4. **Retrieval:** Application service decrypts and returns the raw secret on request.
+This means the idempotency key is not just a lookup token — it is also key material. Losing it means the secret is unrecoverable even though the ciphertext is still in the database.
 
 ### Constant-time comparison
 
-All token and key comparisons use `CryptographicOperations.FixedTimeEquals()` to prevent timing-based attacks:
+The bearer token check in `BearerTokenAuthenticationHandler` uses `CryptographicOperations.FixedTimeEquals()`:
 
 ```csharp
-var isValid = CryptographicOperations.FixedTimeEquals(
-    expected: storedHash,
-    actual: presentedHash
-);
+bool isValid = CryptographicOperations.FixedTimeEquals(tokenBytes, configuredTokenBytes);
 ```
 
-This takes the same amount of time regardless of where the strings first differ, preventing attackers from using response time to guess valid prefixes.
+Secret and idempotency-key lookups, by contrast, go through a SQL equality match on the hashed value (`SecretHash`/`IdempotencyKeyHash`) rather than an in-process byte comparison, so this specific timing-safe helper applies to the bearer token check only.
 
 ---
 
@@ -417,13 +438,13 @@ This takes the same amount of time regardless of where the strings first differ,
 
 Five core principles guide all architectural decisions in Locksmith:
 
-1. **Hash at rest, never store secrets** — raw keys are ephemeral; only hashes and salts persist in the database.
+1. **Hash at rest, never store secrets in plaintext** — raw keys are ephemeral; only hashes, salts, and ciphertext persist in the database.
 
-2. **Append-only audit log** — state transitions are new database rows, never updates; the full history of every key is always available and can never be overwritten.
+2. **Append-only audit log** — state and permission changes are new database rows, never updates; the full history of every key is always available and can never be overwritten.
 
-3. **Least privilege by default** — keys are created in an Inactive state with no permissions; activation and permission grants are explicit operations.
+3. **Least privilege by default** — keys are created in an `Inactive` state with only the permissions explicitly requested at creation (or granted afterward); nothing is implicitly active.
 
-4. **Constant-time comparison everywhere** — all token and key comparisons use timing-safe equality to prevent side-channel attacks.
+4. **Constant-time comparison for the credential a client presents directly** — the bearer token check is timing-safe; lookups by hash go through the database instead.
 
 5. **Bounded blast radius** — a compromised API key is limited to exactly the actions assigned to it; a leaked management token can be rotated without touching key data.
 
@@ -445,9 +466,9 @@ Specific architectural choices and their reasoning are documented in Architectur
 | Concern | Technology |
 |---|---|
 | Framework | .NET 10, ASP.NET Core |
-| ORM | Entity Framework Core |
+| ORM | Entity Framework Core (Npgsql) |
 | Database | PostgreSQL |
-| Cache | Redis |
+| Cache | Redis (`StackExchange.Redis`) |
 | Logging | Serilog (structured logging) |
 | Testing | xUnit, Moq, FluentAssertions |
 | Code style | StyleCop.Analyzers with `.editorconfig` |
@@ -458,22 +479,21 @@ Specific architectural choices and their reasoning are documented in Architectur
 
 What data never leaves the server? What is the attack surface?
 
-### Secrets never leave plaintext
+### Secrets never leave plaintext at rest
 
-- Raw API key secrets are encrypted at rest (AES-256-GCM) and returned only once during creation.
-- Management bearer token is stored in environment variables only, never in code or logs.
-- All comparisons (token, hash) use constant-time equality.
+- Raw API key secrets are encrypted at rest (AES-256-GCM) and returned only on creation and rotation responses.
+- The management bearer token is stored in environment variables only, never in code or logs.
+- The bearer token comparison uses constant-time equality; secret/idempotency-key lookups use hashed unique indexes.
 
-### Audit trail is immutable
+### Audit trail is append-only
 
-- State history (`ApiKeyStatus` table) is append-only: the application cannot update or delete rows.
-- Soft deletes preserve evidence of when keys and permissions were revoked.
-- Every state transition is timestamped; the full history is always queryable.
+- `ApiKeyStatus`, `ApiKeyAction`, and `IdempotencyKey` rows can only be inserted or have `DeletedAt` set — enforced in `AppDbContext.SaveChanges` for all four entities, `ApiKey` included (which has no `DeletedAt` at all, so it can never change after insert).
+- Every state transition and permission grant/revoke is timestamped; the full history is always queryable via `GET .../status/history`.
 
 ### Attack surface is narrowed
 
-- All endpoints (except health checks) require valid bearer token.
-- Request body size is limited to prevent DoS via large payloads.
-- Rate limiting (planned) will throttle per-caller to prevent brute-force attacks.
+- Every versioned endpoint requires a valid bearer token; the four `X-Api-Key`-resolved reads require that header too.
+- Every response carries an explicit cache directive — no response is cacheable by accident.
+- The four `X-Api-Key`-resolved reads are rate limited per API key via a Redis-backed sliding window (`RateLimitFilter`);
 
 For threat-specific analysis, see [Security/threat-model.md](../Security/threat-model.md).

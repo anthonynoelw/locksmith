@@ -228,11 +228,11 @@ tsconfig.json text eol=lf
 # ============================================================================
 
 # Trim trailing whitespace (except Markdown where it's significant)
-*.cs whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
-*.json whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
-*.yaml whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
-*.xml whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
-*.html whitespace=blank-at-eol,-trailing-space,-space-before-tab,indent-with-non-tab,tab-in-indent,blank-at-eof
+*.cs whitespace=blank-at-eol,-trailing-space,-space-before-tab,tab-in-indent,blank-at-eof
+*.json whitespace=blank-at-eol,-trailing-space,-space-before-tab,tab-in-indent,blank-at-eof
+*.yaml whitespace=blank-at-eol,-trailing-space,-space-before-tab,tab-in-indent,blank-at-eof
+*.xml whitespace=blank-at-eol,-trailing-space,-space-before-tab,tab-in-indent,blank-at-eof
+*.html whitespace=blank-at-eol,-trailing-space,-space-before-tab,tab-in-indent,blank-at-eof
 
 # Keep leading spaces in Markdown (soft breaks require 2 trailing spaces)
 *.md -whitespace

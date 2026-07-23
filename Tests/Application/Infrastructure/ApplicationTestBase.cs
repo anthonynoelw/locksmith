@@ -13,6 +13,9 @@ using FluentAssertions;
 [Collection("Application")]
 public abstract class ApplicationTestBase
 {
+    /// <summary>The pre-shared bearer token configured for the test host.</summary>
+    protected const string BEARER_TOKEN = "test-bearer-token";
+
     private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
     /// <summary>
@@ -42,11 +45,11 @@ public abstract class ApplicationTestBase
             Encoding.UTF8,
             "application/json");
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys")
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key")
         {
             Content = content,
         };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-bearer-token");
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
 
         HttpResponseMessage response = await Client.SendAsync(requestMessage);
         string body = await response.Content.ReadAsStringAsync();
@@ -54,5 +57,18 @@ public abstract class ApplicationTestBase
 
         createdKey.Should().NotBeNull();
         return createdKey!;
+    }
+
+    /// <summary>Sends a bearer-authenticated GET whose target key is identified by the <c>X-Api-Key</c> header.</summary>
+    /// <param name="url">The request URL.</param>
+    /// <param name="secret">The plaintext secret to send in the <c>X-Api-Key</c> header.</param>
+    /// <returns>The HTTP response.</returns>
+    protected async Task<HttpResponseMessage> GetWithApiKeyAsync(string url, string secret)
+    {
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", BEARER_TOKEN);
+        requestMessage.Headers.Add("X-Api-Key", secret);
+
+        return await Client.SendAsync(requestMessage);
     }
 }

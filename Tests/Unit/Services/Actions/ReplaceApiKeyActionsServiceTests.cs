@@ -2,6 +2,7 @@ namespace Unit.Services.Actions;
 
 using Application.Interfaces;
 using Application.Interfaces.Repositories;
+using Application.Interfaces.Services;
 using Application.Services.Actions;
 using Domain.Enums;
 using Domain.Exceptions;
@@ -16,6 +17,7 @@ public sealed class ReplaceApiKeyActionsServiceTests
     private readonly Mock<IUnitOfWork> _unitOfWork;
     private readonly Mock<IIdempotencyKeyRepository> _idempotencyKeyRepo;
     private readonly Mock<IApiKeyActionRepository> _actionRepo;
+    private readonly Mock<ICryptoService> _cryptoService;
     private readonly ReplaceApiKeyActionsService _sut;
 
     public ReplaceApiKeyActionsServiceTests()
@@ -29,7 +31,11 @@ public sealed class ReplaceApiKeyActionsServiceTests
             .Setup(u => u.ExecuteInTransactionAsync(It.IsAny<Func<Task>>(), It.IsAny<CancellationToken>()))
             .Returns<Func<Task>, CancellationToken>((operation, _) => operation());
 
-        _sut = new ReplaceApiKeyActionsService(_unitOfWork.Object, _idempotencyKeyRepo.Object);
+        // Identity hashing keeps the raw key equal to the lookup hash the repository is set up against.
+        _cryptoService = new Mock<ICryptoService>();
+        _cryptoService.Setup(c => c.HashForLookup(It.IsAny<string>())).Returns<string>(s => s);
+
+        _sut = new ReplaceApiKeyActionsService(_unitOfWork.Object, _idempotencyKeyRepo.Object, _cryptoService.Object);
     }
 
     [Fact]
@@ -168,6 +174,17 @@ public sealed class ReplaceApiKeyActionsServiceTests
 
         await act.Should().ThrowAsync<NotFoundException>();
         _actionRepo.Verify(r => r.AddAsync(It.IsAny<ApiKeyAction>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithUndefinedActionValue_ThrowsValidationException()
+    {
+        Func<Task> act = () => _sut.ExecuteAsync("any-key", new[] { (ApiKeyActionEnum)42 }, CREATED_BY);
+
+        await act.Should().ThrowAsync<ValidationException>();
+        _idempotencyKeyRepo.Verify(
+            r => r.GetByHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     private void SetUpIdempotencyKey(string idempotencyKeyHash, Guid apiKeyId)

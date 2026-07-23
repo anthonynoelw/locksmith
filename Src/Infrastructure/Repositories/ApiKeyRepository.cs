@@ -89,7 +89,8 @@ public sealed class ApiKeyRepository(AppDbContext db) : IApiKeyRepository
     }
 
     /// <summary>
-    /// Soft-deletes an existing API Key by marking its related statuses and actions as deleted.
+    /// Soft-deletes an existing API Key by marking its related statuses, actions, and idempotency keys
+    /// as deleted.
     /// </summary>
     /// <param name="id">The API Key identifier.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -104,7 +105,13 @@ public sealed class ApiKeyRepository(AppDbContext db) : IApiKeyRepository
             .Where(a => a.ApiKeyId == id && a.DeletedAt == null)
             .ToListAsync(ct);
 
-        if (statuses.Count > 0 || actions.Count > 0)
+        // Without this, the idempotency key keeps resolving after "deletion", letting a caller who
+        // still holds it grant actions, rotate, or otherwise resurrect the deleted key.
+        List<IdempotencyKey> idempotencyKeys = await db.IdempotencyKeys
+            .Where(k => k.ApiKeyId == id && k.DeletedAt == null)
+            .ToListAsync(ct);
+
+        if (statuses.Count > 0 || actions.Count > 0 || idempotencyKeys.Count > 0)
         {
             // The entities are tracked, so setting DeletedAt is enough. UpdateRange() would mark
             // every property as modified, which the append-only guard in AppDbContext.SaveChanges
@@ -118,6 +125,11 @@ public sealed class ApiKeyRepository(AppDbContext db) : IApiKeyRepository
             foreach (ApiKeyAction action in actions)
             {
                 action.DeletedAt = now;
+            }
+
+            foreach (IdempotencyKey idempotencyKey in idempotencyKeys)
+            {
+                idempotencyKey.DeletedAt = now;
             }
 
             await db.SaveChangesAsync(ct);

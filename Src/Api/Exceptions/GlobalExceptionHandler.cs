@@ -1,5 +1,7 @@
 namespace Api.Exceptions;
 
+using Api.Filters;
+
 using Domain.Exceptions;
 
 using Microsoft.AspNetCore.Diagnostics;
@@ -78,6 +80,11 @@ public sealed class GlobalExceptionHandler(
         };
 
         httpContext.Response.StatusCode = problemDetails.Status!.Value;
+
+        // Error responses are produced in middleware, outside the MVC result pipeline, so the
+        // ResponseCacheControlFilter never runs for them. Stamp the same directives here so errors are
+        // never cached, even for endpoints whose successful responses are.
+        ResponseCacheControlFilter.ApplyNoStore(httpContext.Response.Headers);
 
         await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {

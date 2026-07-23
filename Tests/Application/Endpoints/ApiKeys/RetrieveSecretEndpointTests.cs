@@ -28,7 +28,7 @@ public sealed class RetrieveSecretEndpointTests(ApplicationFixture fixture) : Ap
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/retrieve-secret")
+        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/secret")
         {
             Content = retrieveContent,
         };
@@ -54,7 +54,7 @@ public sealed class RetrieveSecretEndpointTests(ApplicationFixture fixture) : Ap
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/retrieve-secret")
+        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/secret")
         {
             Content = retrieveContent,
         };
@@ -81,7 +81,7 @@ public sealed class RetrieveSecretEndpointTests(ApplicationFixture fixture) : Ap
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/retrieve-secret")
+        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/secret")
         {
             Content = retrieveContent,
         };
@@ -101,7 +101,7 @@ public sealed class RetrieveSecretEndpointTests(ApplicationFixture fixture) : Ap
             System.Text.Encoding.UTF8,
             "application/json");
 
-        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-keys/retrieve-secret")
+        using var retrieveMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/api-key/secret")
         {
             Content = retrieveContent,
         };
