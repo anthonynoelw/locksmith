@@ -585,10 +585,6 @@ All error responses follow [RFC 9457 ProblemDetails](https://www.rfc-editor.org/
 
 ## Not yet implemented
 
-<<<<<<< HEAD
-- **Rate limiting** — `WellKnown.RateLimitPolicies.PER_API_KEY` and the `X-Api-Key`-resolved identity it would partition on already exist (`ResolveApiKeyFilter`, `Controller.cs`), but no limiter is wired in yet. Redis is connected and checked in `/health/ready`, but not yet used for limiting.
-=======
->>>>>>> 50f05086dc94e6e475a8f3e029f4f10eefcb9ce0
 - **`Idempotency-Key` request-deduplication semantics** — a client-supplied header with `409` on replay-with-different-body. Distinct from the idempotency key Locksmith itself generates and returns at creation, which is fully implemented and used throughout this document.
 - **Agent expiry job** — nothing currently transitions a key to `Expired` automatically; `PATCH .../status` can still be used to set it manually.
 
