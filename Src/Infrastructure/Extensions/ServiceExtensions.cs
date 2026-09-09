@@ -2,8 +2,10 @@ namespace Infrastructure.Extensions;
 
 using Application.Interfaces;
 using Application.Interfaces.Repositories;
+using Application.Interfaces.Services;
 using Domain;
 using Infrastructure.Data;
+using Infrastructure.RateLimiting;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
@@ -52,6 +54,8 @@ public static class ServiceExtensions
         redisOptions.AbortOnConnectFail = false;
         services.AddSingleton<IConnectionMultiplexer>(
             ConnectionMultiplexer.Connect(redisOptions));
+
+        services.AddSingleton<IRateLimiter, RedisSlidingWindowRateLimiter>();
 
         return services;
     }

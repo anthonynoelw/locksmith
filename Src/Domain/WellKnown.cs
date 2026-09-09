@@ -20,6 +20,9 @@ public static class WellKnown
 
         /// <summary>The "Cache" configuration section (response cache-control durations).</summary>
         public const string CACHE = "Cache";
+
+        /// <summary>The "RateLimiting" configuration section (per-API-key rate limiter settings).</summary>
+        public const string RATE_LIMITING = "RateLimiting";
     }
 
     /// <summary>
@@ -80,16 +83,6 @@ public static class WellKnown
     }
 
     /// <summary>
-    /// Rate-limiting policy names. Reserved for the future limiter that partitions by the resolved
-    /// API key; not yet wired into a limiter.
-    /// </summary>
-    public static class RateLimitPolicies
-    {
-        /// <summary>Per-API-key rate-limit policy, partitioned by the caller's API key.</summary>
-        public const string PER_API_KEY = "per-api-key";
-    }
-
-    /// <summary>
     /// Caller identities recorded in <c>CreatedBy</c> audit columns. Audit columns are persisted and
     /// exposed in API responses, so they must never contain secrets such as the bearer token itself.
     /// </summary>
@@ -97,5 +90,21 @@ public static class WellKnown
     {
         /// <summary>The identity recorded for requests authenticated with the pre-shared bearer token.</summary>
         public const string API_CLIENT = "api-client";
+    }
+
+    /// <summary>
+    /// Response header names emitted by the rate limiter to communicate the current quota state.
+    /// Set on every rate-limited response; <c>Retry-After</c> is added alongside these on a 429.
+    /// </summary>
+    public static class RateLimitHeaders
+    {
+        /// <summary>The maximum number of requests permitted within the current window.</summary>
+        public const string LIMIT = "X-RateLimit-Limit";
+
+        /// <summary>The number of requests remaining in the current window.</summary>
+        public const string REMAINING = "X-RateLimit-Remaining";
+
+        /// <summary>The Unix time (seconds) at which the current window resets.</summary>
+        public const string RESET = "X-RateLimit-Reset";
     }
 }

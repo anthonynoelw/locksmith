@@ -109,6 +109,12 @@ internal static class ServiceExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        builder.Services
+            .AddOptions<RateLimitSettings>()
+            .BindConfiguration(WellKnown.ConfigSections.RATE_LIMITING)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<CryptoSettings>>().Value);
         builder.Services.AddScoped<ICryptoService, CryptoService>();
         builder.Services.AddScoped<ICreateApiKeyService, CreateApiKeyService>();
@@ -129,6 +135,13 @@ internal static class ServiceExtensions
 
         // Resolves the X-Api-Key header to a key identity on read endpoints.
         builder.Services.AddScoped<ResolveApiKeyFilter>();
+
+        // Enforces per-API-key rate limiting on the endpoints ResolveApiKeyFilter resolves an identity for.
+        builder.Services.AddScoped<RateLimitFilter>();
+
+        // Enforces the same per-API-key rate limiting on idempotencyKey/secret-identified mutation
+        // endpoints, which carry no X-Api-Key header for ResolveApiKeyFilter to resolve.
+        builder.Services.AddScoped<CredentialRateLimitFilter>();
 
         return builder;
     }
