@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Generated from [Conventional Commits](https://www.conventionalcommits.org/) via [release-please](https://github.com/googleapis/release-please).
 
+## [1.1.1](https://github.com/anthonynoelw/locksmith/compare/v1.1.0...v1.1.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **ci:** align Microsoft.Extensions.Configuration.Json with Hosting 10.0.12 ([34cea29](https://github.com/anthonynoelw/locksmith/commit/34cea29b2b855b556e40c6e7790e9f7276bdff0d))
+* restore package.json and drop leftover api-surface conflict markers ([a525e83](https://github.com/anthonynoelw/locksmith/commit/a525e8372e43c94fc12cad08aea4240411d9bd8c))
+
 ## [1.1.0](https://github.com/anthonynoelw/locksmith/compare/v1.0.0...v1.1.0) (2026-07-23)
 
 
