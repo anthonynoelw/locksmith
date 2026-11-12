@@ -20,8 +20,9 @@ Located in `Src/Domain/`. Contains business entities and domain logic with **zer
 - **Entities:** `ApiKey`, `ApiKeyStatus`, `ApiKeyAction`, `IdempotencyKey` — all four implement `IAppendOnlyTable` (see [The data model](#the-data-model))
 - **Enums:** `ApiKeyStatusEnum` (`Inactive`, `Active`, `Revoked`, `Expired`), `ApiKeyActionEnum` (`Read`, `Write`, `Delete`, `Execute`)
 - **Exceptions:** `NotFoundException`, `ValidationException`, `ConflictException`, `DecryptionFailedException`, `AppendOnlyViolationException` — mapped to HTTP status codes by the Api layer (except `AppendOnlyViolationException`, which indicates an internal invariant violation and falls through to `500`)
-- **Constants:** `WellKnown` — config section names, connection string keys, health check tags, auth scheme names, request header names, `HttpContext.Items` keys, rate-limit response header names, caller identities, and cache durations, all in one place to avoid magic strings
-- **Settings classes:** `ApiSettings`, `AgentSettings` (in their respective projects) and `CryptoSettings` (in Application) — configuration POCOs with validation attributes
+- **Constants:** `WellKnown` — config section names, connection string keys, health check tags, auth scheme names, request header names, `HttpContext.Items` keys, rate-limit response header names, and caller identities, all in one place to avoid magic strings
+
+Settings classes do **not** live here — they sit in the project that owns them (see [Configuration and startup validation](#configuration-and-startup-validation)).
 
 This layer is pure .NET. It knows nothing about databases, HTTP, or external services.
 
@@ -33,8 +34,9 @@ Located in `Src/Application/`. Contains use cases and application services.
 - **Status services** (`Services/Status/`): `GetApiKeyStatusService`, `GetApiKeyStatusHistoryService`, `UpdateApiKeyStatusService`
 - **Action services** (`Services/Actions/`): `ListApiKeyActionsService`, `ReplaceApiKeyActionsService`, `GrantApiKeyActionService`, `RevokeApiKeyActionService`, plus the internal `ApiKeyActionParser` (exact, case-insensitive name matching — rejects the numeric and comma-list values `Enum.TryParse` would otherwise accept)
 - No FluentValidation validators exist; validation is inline in services (e.g. `ExpiresAt` in `CreateApiKeyService`) or via `[Required]`/`[RegularExpression]` on the request records in Api
-- **Interfaces:** `IApiKeyRepository`, `IApiKeyStatusRepository`, `IApiKeyActionRepository`, `IIdempotencyKeyRepository`, `IUnitOfWork`, `ICryptoService` — contracts for infrastructure concerns
+- **Interfaces:** `IApiKeyRepository`, `IApiKeyStatusRepository`, `IApiKeyActionRepository`, `IIdempotencyKeyRepository`, `IUnitOfWork`, `ICryptoService`, `IRateLimiter` — contracts for infrastructure concerns
 - **Commands/DTOs:** `CreateApiKeyCommand`/`CreateApiKeyResult`, `ApiKeyMetadata` (+ `ApiKeyMetadataMapper`), and per-service result records
+- **Settings:** `CryptoSettings` (Argon2id parameters) and `RateLimitSettings` (sliding-window limiter)
 
 ### Infrastructure
 
@@ -43,8 +45,9 @@ Located in `Src/Infrastructure/`. Implements the interfaces defined in Applicati
 - **EF Core context:** `AppDbContext` with entity configurations, including the append-only guard (see [The data model](#the-data-model))
 - **Repositories:** `ApiKeyRepository`, `ApiKeyStatusRepository`, `ApiKeyActionRepository`, `IdempotencyKeyRepository` — reads filter out soft-deleted rows where the domain requires "currently active" semantics; history reads intentionally don't
 - **Unit of Work:** `UnitOfWork` manages transaction scope across multiple repositories (`ExecuteInTransactionAsync`)
-- **External services:** Redis distributed cache client, EF Core + Redis readiness health checks
-- **Migrations:** Entity Framework schema migrations
+- **Rate limiting:** `RedisSlidingWindowRateLimiter` — the `IRateLimiter` implementation, a Redis sorted-set sliding window evaluated atomically in a Lua script
+- **External services:** Redis distributed cache and `IConnectionMultiplexer`
+- **Migrations:** Entity Framework schema migrations (`Src/Infrastructure/Migrations/`)
 
 ### Api
 
@@ -53,7 +56,9 @@ Located in `Src/Api/`. ASP.NET Core entry point. Hosts HTTP endpoints and orches
 - **Controllers:** `ApiKeyController`, `ApiKeyStatusController`, `ApiKeyActionController`, versioned under `Src/Api/Controllers/V1/` with an explicit `[ApiVersion(1.0)]` attribute — all inherit from `Src/Api/Controllers/Controller.cs`, which carries the versioned route template (`/api/v{version:apiVersion}/[controller]`) and `[Authorize]`; each controller overrides the route to `api/v{version:apiVersion}/api-key` so all three share the same base path
 - **Authentication:** `BearerTokenAuthenticationHandler` — a custom `AuthenticationHandler<T>` that validates the static bearer token with constant-time comparison
 - **`ResolveApiKeyFilter`:** an `IAsyncActionFilter` that resolves the `X-Api-Key` header to a key identity for the four read endpoints that need it (see [api-surface.md](api-surface.md#identifying-a-key))
+- **`RateLimitFilter` / `CredentialRateLimitFilter`:** action filters that enforce the sliding-window quota — the first partitions on the key `ResolveApiKeyFilter` resolved, the second on a hash of the request-body credential (see [api-surface.md](api-surface.md#rate-limiting))
 - **`ResponseCacheControlFilter`:** an `IAlwaysRunResultFilter` that stamps `no-store` on every response by default, or a short private cache on actions marked `[Cacheable]` (see [api-surface.md](api-surface.md#response-caching))
+- **Settings:** `ApiSettings` (name, bearer token), `CacheSettings` (`[Cacheable]` max-age), and `DatabaseSettings` (currently unused — not bound anywhere)
 - **Global exception handler:** `GlobalExceptionHandler` catches domain exceptions, converts to RFC 9457 ProblemDetails
 - **Middleware:** Serilog request logging, authentication/authorization, health checks
 - **OpenAPI:** automatic OpenAPI document generation (`/openapi/v1.json`) plus a [Scalar](https://scalar.com/) UI (`/scalar/v1`) in Development environment
@@ -64,7 +69,7 @@ Located in `Src/Agent/`. Separate Worker Service executable — runs background 
 
 - **Worker service:** `Worker` implements `BackgroundService`/`IHostedService`. It currently only logs on startup and performs no periodic work — the key-expiry polling job described in [TODO.md](../TODO.md) isn't implemented yet.
 - **Shared infrastructure:** reuses repositories, `AppDbContext`, and Infrastructure services via the same `AddInfrastructure()` extension the Api project calls
-- **Independent startup:** wires services independently from Api (`AddAgentServices()`); both read the same configuration
+- **Independent startup:** wires services independently from Api (`AddAgentServices()`) and has its own `appsettings*.json` files (`Agent` section, connection strings, Serilog)
 
 **Key distinction:** Api and Agent are separate entry points that share domain/infrastructure logic but have different purposes.
 
@@ -81,7 +86,7 @@ When an HTTP request arrives at the Api, it travels through this pipeline (in `U
 5. **Authentication middleware** — `BearerTokenAuthenticationHandler` validates `Authorization: Bearer <token>` using constant-time comparison
 6. **Authorization middleware** — enforces `[Authorize]` on the base `Controller` class; returns `401` on missing/invalid token
 7. **Controller routing** — matches request to a controller action based on route template and HTTP method
-8. **Action filters** — `ResolveApiKeyFilter` (on the four `X-Api-Key`-based reads) resolves the caller's key identity onto `HttpContext.Items`; `ResponseCacheControlFilter` (registered globally) stamps cache headers on the way out
+8. **Action filters** — `ResolveApiKeyFilter` (on the four `X-Api-Key`-based reads) resolves the caller's key identity onto `HttpContext.Items`, then `RateLimitFilter` checks that key's quota; on credential-identified mutations `CredentialRateLimitFilter` checks the quota for the hashed body credential instead; `ResponseCacheControlFilter` (registered globally) stamps cache headers on the way out
 9. **Action execution** — controller calls an application service, which uses repositories (via `IUnitOfWork`) to query/mutate data
 10. **Response serialization** — result is serialized to JSON and returned
 11. **Health check endpoints** — special-case unversioned routes (`/health`, `/health/ready`) that don't require authentication and sit outside the versioned controller routes
@@ -130,22 +135,18 @@ curl http://localhost:5000/health
 
 ### Readiness: `GET /health/ready`
 
-Runs checks tagged `"READY"` (EF Core database, Redis cache). Returns `Healthy` only when all dependencies are reachable. Use this for Kubernetes readiness probes.
+Runs checks tagged `WellKnown.HealthCheckTags.READY` (`"READY"`) — the EF Core `AppDbContext` check and the Redis check. Returns `Healthy` (200) only when all dependencies are reachable, otherwise `Unhealthy` (503). Use this for Kubernetes readiness probes.
 
 ```bash
 # When ready
 curl http://localhost:5000/health/ready
-# { "status": "Healthy", "totalDuration": "00:00:00.012", "entries": {} }
+# { "status": "Healthy", "totalDuration": "00:00:00.012",
+#   "entries": { "AppDbContext": { "status": "Healthy", ... }, "redis": { "status": "Healthy", ... } } }
 
-# When database is down
+# When the database is down
 curl http://localhost:5000/health/ready
-# {
-#   "status": "Unhealthy",
-#   "totalDuration": "00:00:05.000",
-#   "entries": {
-#     "database": { "status": "Unhealthy", "description": "Connection refused" }
-#   }
-# }
+# { "status": "Unhealthy", "totalDuration": "00:00:05.000",
+#   "entries": { "AppDbContext": { "status": "Unhealthy", ... }, "redis": { "status": "Healthy", ... } } }
 ```
 
 ---
@@ -185,7 +186,18 @@ All settings use the `IOptions<T>` pattern with validation that runs at startup 
 
 ### How configuration works
 
-1. Settings live in `Src/<Project>/Settings/` (or `Src/Application/Settings/` for `CryptoSettings`) as POCOs with validation attributes:
+1. Settings live in `Src/<Project>/Settings/` as POCOs with validation attributes:
+
+| Class | Project | Section | Purpose |
+|---|---|---|---|
+| `ApiSettings` | Api | `Api` | Application name and the management bearer token (both required) |
+| `CacheSettings` | Api | `Cache` | `ApiKeyReadSeconds` — max-age for `[Cacheable]` reads (default 60) |
+| `CryptoSettings` | Application | `Cryptography` | Argon2id parameters |
+| `RateLimitSettings` | Application | `RateLimiting` | `Enabled`, `PermitLimit`, `WindowSeconds`, `FailOpen` |
+| `AgentSettings` | Agent | `Agent` | Agent name (required) |
+| `DatabaseSettings` | Api | `Database` | Unused — present in `appsettings.json` but never bound |
+
+For example:
 
 ```csharp
 public sealed class ApiSettings
@@ -208,7 +220,7 @@ builder.Services
     .ValidateOnStart();
 ```
 
-3. Any controller or service that needs the settings requests `IOptions<ApiSettings>` (or, for `CryptoSettings`, the plain class — it's registered as a singleton instance, not wrapped in `IOptions<T>`) via constructor injection.
+3. Any controller or service that needs the settings requests `IOptions<T>` via constructor injection. `CryptoSettings` is bound and validated the same way, and is *additionally* registered as a plain singleton (`IOptions<CryptoSettings>.Value`), so `CryptoService` can take the class directly.
 
 ### Configuration section names
 
@@ -220,12 +232,14 @@ public static class ConfigSections
     public const string API = "API";
     public const string AGENT = "AGENT";
     public const string CRYPTOGRAPHY = "Cryptography";
+    public const string CACHE = "Cache";
+    public const string RATE_LIMITING = "RateLimiting";
 }
 ```
 
-Configuration binding is case-insensitive, so `appsettings.json` spells these `"Api"`, `"Agent"`, and `"Cryptography"` — matching the constant's *value*, not necessarily its casing.
+Configuration binding is case-insensitive, so `appsettings.json` spells these `"Api"` and `"Agent"` — matching the constant's *value*, not necessarily its casing.
 
-`CryptoSettings` (Argon2id tuning) is a separate settings class in `Application/Settings/`, bound to the `Cryptography` section:
+`CryptoSettings` (Argon2id tuning), bound to the `Cryptography` section:
 
 ```csharp
 public sealed class CryptoSettings
@@ -249,7 +263,7 @@ If any setting is missing or invalid, the application fails to start with a clea
 
 ## Logging and observability
 
-Both Api and Agent use **Serilog** for structured logging, configured from `appsettings.json`.
+Both Api and Agent use **Serilog** for structured logging, configured from `appsettings.json`. Sinks today are Console (compact JSON) and rolling daily files under `logs/` (all events, plus a separate warnings-and-above file). `appsettings.Development.json` swaps the first sink (Console) to a human-readable template and lowers the minimum level to `Debug`; because configuration arrays merge by index, the File sinks still apply in Development. Classes log through `ILogger<T>`, with Serilog as the provider. No log aggregator (e.g. Seq) is wired up yet.
 
 ### What gets logged
 
@@ -261,21 +275,21 @@ Both Api and Agent use **Serilog** for structured logging, configured from `apps
 
 `AddSerilogLogging()` extension method configures Serilog from `appsettings.json`. Both Api and Agent call this during startup.
 
-Example `appsettings.Development.json`:
+The enrichers (`FromLogContext`, machine name, environment name) are added in code by `AddSerilogLogging()`, not in JSON. The Development console sink, from `Src/Api/appsettings.Development.json`:
 ```json
 {
   "Serilog": {
-    "MinimumLevel": "Debug",
+    "MinimumLevel": {
+      "Default": "Debug",
+      "Override": { "Microsoft": "Information", "Microsoft.Hosting.Lifetime": "Information", "System": "Warning" }
+    },
     "WriteTo": [
       {
         "Name": "Console",
-        "Args": { "theme": "Ansi" }
+        "Args": {
+          "outputTemplate": "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}{NewLine}{Message:lj}{NewLine}{Exception}"
+        }
       }
-    ],
-    "Enrich": [
-      "FromLogContext",
-      "WithMachineName",
-      "WithEnvironmentName"
     ]
   }
 }
@@ -290,13 +304,13 @@ Extension methods on `IHostApplicationBuilder` keep `Program.cs` clean:
 ### `AddApiServices()` — Api-specific wiring (`Src/Api/Extensions/ServiceExtensions.cs`)
 
 Registers:
-- Controllers, `ResponseCacheControlFilter`, and `ResolveApiKeyFilter`
+- Controllers with the global `ResponseCacheControlFilter`, plus the `ResolveApiKeyFilter`, `RateLimitFilter`, and `CredentialRateLimitFilter` action filters
 - Bearer token authentication scheme and API versioning
 - Version-aware OpenAPI document generation
-- `ApiSettings` and `CryptoSettings` options binding
-- Every key/status/action application service
+- `ApiSettings`, `CryptoSettings`, `CacheSettings`, and `RateLimitSettings` options binding
+- `ICryptoService` and every key/status/action application service
 - Global exception handler and ProblemDetails formatting (including a custom `InvalidModelStateResponseFactory` so model-binding failures return the same 422 shape as domain validation errors)
-- Health checks (EF Core + Redis, tagged `"READY"`)
+- Health checks (EF Core + Redis, tagged `READY`)
 
 ### `AddAgentServices()` — Agent-specific wiring (`Src/Agent/Extensions/ServiceExtensions.cs`)
 
@@ -310,6 +324,7 @@ Registered in a shared extension method in the Infrastructure layer (`Src/Infras
 - EF Core `AppDbContext` (Npgsql)
 - `IUnitOfWork` and all four repositories
 - Redis distributed cache + `IConnectionMultiplexer`
+- `IRateLimiter` → `RedisSlidingWindowRateLimiter` (singleton)
 
 ### Middleware pipeline via `UseApiPipeline()`
 
@@ -380,7 +395,7 @@ All four entities implement `Domain.IAppendOnlyTable`. Enforcement is **applicat
 
 ## Cryptography and key management
 
-Locksmith implements multiple layers of cryptographic security in `CryptoService`. See [ADR-002](../Decisions/ADR-002-api-key-creation.md) for the full design rationale.
+Locksmith implements multiple layers of cryptographic security in `CryptoService`. [ADR-002](../Decisions/ADR-002-api-key-creation.md) records the decision to generate keys server-side; the encryption design below was built under it.
 
 ### Key generation
 
@@ -438,7 +453,7 @@ Secret and idempotency-key lookups, by contrast, go through a SQL equality match
 
 Five core principles guide all architectural decisions in Locksmith:
 
-1. **Hash at rest, never store secrets in plaintext** — raw keys are ephemeral; only hashes, salts, and ciphertext persist in the database.
+1. **Never store secrets in plaintext** — secrets are looked up by hash and persisted only as AES-256-GCM ciphertext; only hashes, salts, and ciphertext live in the database.
 
 2. **Append-only audit log** — state and permission changes are new database rows, never updates; the full history of every key is always available and can never be overwritten.
 
@@ -455,7 +470,7 @@ Five core principles guide all architectural decisions in Locksmith:
 Specific architectural choices and their reasoning are documented in Architecture Decision Records (ADRs). Don't duplicate that reasoning here — link instead:
 
 - **[ADR-001: API Key Lifecycle](../Decisions/ADR-001-api-key-lifecycle.md)** — state machine design and append-only history
-- **[ADR-002: API Key Creation](../Decisions/ADR-002-api-key-creation.md)** — cryptography, DEK derivation, encryption at rest
+- **[ADR-002: API Key Creation](../Decisions/ADR-002-api-key-creation.md)** — system-generated keys; implementation notes cover the encryption at rest
 - **[ADR-003: Action Management](../Decisions/ADR-003-api-key-action-management.md)** — permissions model and least-privilege design
 - **[ADR-004: Authentication](../Decisions/ADR-004-authentication.md)** — why static bearer tokens instead of JWT/OIDC
 
@@ -468,9 +483,11 @@ Specific architectural choices and their reasoning are documented in Architectur
 | Framework | .NET 10, ASP.NET Core |
 | ORM | Entity Framework Core (Npgsql) |
 | Database | PostgreSQL |
-| Cache | Redis (`StackExchange.Redis`) |
+| Cache / rate limiting | Redis (`StackExchange.Redis`) |
+| Cryptography | .NET `System.Security.Cryptography` (SHA-256, AES-GCM), `Konscious.Security.Cryptography.Argon2` |
+| API docs | `Microsoft.AspNetCore.OpenApi` + Scalar |
 | Logging | Serilog (structured logging) |
-| Testing | xUnit, Moq, FluentAssertions |
+| Testing | xUnit, Moq, FluentAssertions, `WebApplicationFactory`, Testcontainers (PostgreSQL, Redis) |
 | Code style | StyleCop.Analyzers with `.editorconfig` |
 
 ---
@@ -494,6 +511,6 @@ What data never leaves the server? What is the attack surface?
 
 - Every versioned endpoint requires a valid bearer token; the four `X-Api-Key`-resolved reads require that header too.
 - Every response carries an explicit cache directive — no response is cacheable by accident.
-- The four `X-Api-Key`-resolved reads are rate limited per API key via a Redis-backed sliding window (`RateLimitFilter`);
+- Every endpoint that targets an existing key is rate limited via a Redis-backed sliding window: the four `X-Api-Key`-resolved reads per resolved key (`RateLimitFilter`), and every credential-identified mutation per hashed body credential (`CredentialRateLimitFilter`). Only `create` and `list all` are unthrottled.
 
 For threat-specific analysis, see [Security/threat-model.md](../Security/threat-model.md).

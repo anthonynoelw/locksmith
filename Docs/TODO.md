@@ -10,8 +10,8 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Authentication
 
-- [x] Static bearer token middleware — extract from `Authorization: Bearer <token>` header, validate against `ApiSettings.BearerToken` using `FixedTimeEquals` (constant-time); return `401` on missing/invalid; runs before auth handler
-- [x] `[Authorize]` attribute on all management endpoints to enforce middleware result — applied to every action in `ApiKeyController`
+- [x] Static bearer token authentication — `BearerTokenAuthenticationHandler` (custom `AuthenticationHandler<T>`) extracts `Authorization: Bearer <token>`, validates against `ApiSettings.BearerToken` using `FixedTimeEquals` (constant-time); `401` on missing/invalid
+- [x] `[Authorize]` on all management endpoints — applied once on the base `Controller` class, inherited by `ApiKeyController`, `ApiKeyStatusController`, and `ApiKeyActionController`
 - [x] Inject token via environment variable / config; validate with `[Required]` on `ApiSettings` at startup
 - [x] Exempt `/health` and `/health/ready` from authentication (not under `/api/v{version}/`)
 
@@ -36,16 +36,16 @@ Core functionality and security-critical items required before Locksmith can be 
 ### Data Access
 
 - [x] EF Core `AppDbContext` in `Infrastructure` — entity configurations for `ApiKey`, `ApiKeyStatus`, `ApiKeyAction`, `IdempotencyKey`
-- [x] Append-only constraint on `ApiKeyStatus` and `IdempotencyKey` — no `Update` or `Delete` allowed through the context; enforced via `HasNoKey()` on entity builder
+- [x] Append-only constraint on all four entities — every entity implements `IAppendOnlyTable`; `AppDbContext.SaveChanges`/`SaveChangesAsync` throws `AppendOnlyViolationException` on any hard delete or any modification other than setting `DeletedAt` (application-layer only — see Security Hardening for the database-layer follow-up)
 - [x] Unique index on `ApiKey.SecretHash` (hashed for deduplication)
 - [x] Unique index on `IdempotencyKey.IdempotencyKeyHash` (hashed for deduplication)
 - [x] Soft-delete support — `DeletedAt` column on `ApiKeyStatus`, `ApiKeyAction`, and `IdempotencyKey` for logical deletion
-- [x] Migrations — creates `api_keys`, `api_key_statuses`, `api_key_actions`, `idempotency_keys` tables with proper constraints
+- [x] Migrations — create the `ApiKeys`, `ApiKeyStatuses`, `ApiKeyActions`, `IdempotencyKeys` tables with unique indexes and the partial unique active-grant index (note: `AddAppendOnlyConstraints` is an empty migration — it adds nothing to the schema)
 - [x] Repository interfaces in `Application` — `IApiKeyRepository`, `IApiKeyStatusRepository`, `IApiKeyActionRepository`, `IIdempotencyKeyRepository`
 - [x] Repository implementations in `Infrastructure` — query filters exclude soft-deleted rows
 - [x] `IUnitOfWork` interface and implementation
 - [x] Register DbContext and repositories in `Infrastructure` service extensions
-- [x] EF Core readiness health check tagged `"ready"`
+- [x] EF Core readiness health check tagged `READY`
 - [x] Redis distributed cache connection configured and validated in readiness health check
 
 ### Application Layer
@@ -56,7 +56,7 @@ Core functionality and security-critical items required before Locksmith can be 
 - [x] `PatchApiKeyStatus` service — implemented as `UpdateApiKeyStatusService`; resolves the API key via idempotency-key hash lookup (not keyId), soft-deletes the current status (guarding `Revoked`/`Expired`), then appends the new status row
 - [x] `GetApiKeyStatus` service — implemented as `GetApiKeyStatusService` (current status by keyId) and `GetApiKeyStatusHistoryService` (full history by keyId); not in original scope
 - [x] `RotateApiKey` service — implemented as `RotateApiKeyService`: atomically deletes the current key and issues a new one carrying the same active actions (not a re-encrypt-in-place; a delete + create in one transaction)
-- [X] `RevokeApiKey` service — append `Revoked` status row; soft-delete semantics - implemented as `UpdateApiKeyStatusService`;
+- [x] `RevokeApiKey` service — append `Revoked` status row; soft-delete semantics — implemented as `UpdateApiKeyStatusService` (no dedicated revoke service)
 - [x] `ListApiKeyActions` service — return active actions (soft-delete filter)
 - [x] `ReplaceApiKeyActions` service — diff current vs. new set; soft-delete removed, insert added
 - [x] `GrantApiKeyAction` service — insert single action; throws `ConflictException` only if there is a currently *active* grant — a previously revoked (soft-deleted) action can be re-granted, matching how status tracks current state as the latest non-deleted row
@@ -64,7 +64,7 @@ Core functionality and security-critical items required before Locksmith can be 
 
 ### Idempotency
 
-- [x]! Deprecated(The Idempotency Key will be received via the request body): `Idempotency-Key` header extraction — read from request on idempotent operations (POST) 
+- ~~`Idempotency-Key` header extraction~~ — dropped: the server-generated idempotency key is sent in the request body instead. A client-supplied header would only be needed for the deduplication items below.
 - [ ] Deduplication cache — store response (status + body) keyed by `Idempotency-Key` hash; check before handler, return cached response if present; store result after successful execution
 - [ ] Cache expiry — TTL matched to key expiry window (30 days default); cleared on cache eviction or explicit purge
 - [ ] Conflict detection — if same `Idempotency-Key` used with different request body, return `409 Conflict` with error explaining mismatch
@@ -82,7 +82,7 @@ Note: Routes use `/api/v{version}/api-key` (**singular** — not `/api1/keys` or
 - [x] `GET /api/v{version}/api-key/status/history` — full status history, resolved via `X-Api-Key` header, including soft-deleted entries (not in original scope)
 - [x] `PATCH /api/v{version}/api-key/status` — activate/deactivate/revoke by `idempotencyKey`; `409` if current status is `Revoked`/`Expired`; `422` on missing/bad status value; appends `ApiKeyStatus` row — implemented as `PATCH .../status` rather than the originally scoped `PATCH .../{keyId}`
 - [x] `POST /api/v{version}/api-key/rotate` — deletes the current key and issues a new one with the same active actions atomically; `404` if idempotency key unknown; returns new plaintext secret once
-- [x] `DELETE /api/v{version}/api-key` — soft-deletes active status/action/idempotency-key rows by `idempotencyKey`; `204` on success; `404` if not found — the `api_keys` row itself is never deleted
+- [x] `DELETE /api/v{version}/api-key` — soft-deletes active status/action/idempotency-key rows by `idempotencyKey`; `204` on success; `404` if not found — the `ApiKeys` row itself is never deleted
 
 ### API Endpoints — Action Management
 
@@ -98,7 +98,7 @@ Note: Routes use `/api/v{version}/api-key` (**singular** — not `/api1/keys` or
 
 ### Rate Limiting
 
-- [x] Redis connection validated in readiness health check (tag: `"ready"`) — `AddRedis(...)` in `AddApiServices`
+- [x] Redis connection validated in readiness health check (tag: `READY`) — `AddRedis(...)` in `AddApiServices`
 - [x] Distributed sliding-window rate limiter — implemented as the `RateLimitFilter` MVC action filter (`Api/Filters`) backed by a Redis sorted-set Lua script (`Infrastructure/RateLimiting/RedisSlidingWindowRateLimiter`) behind the `IRateLimiter` abstraction. Keyed **per resolved API key ID**, read from `HttpContext.Items` after `ResolveApiKeyFilter` runs — applied to the four `X-Api-Key`-resolved `GET` endpoints (current key, current status, status history, active actions). Runs after authentication, so `401`s are never counted. Fails open on Redis outage (configurable)
 - [x] Configurable limit and window duration via `RateLimitSettings` (`RateLimiting` config section; defaults 100 requests / 60 seconds) — dedicated options class mirroring `CryptoSettings` rather than folding into `ApiSettings`
 - [x] Return `429 Too Many Requests` with `Retry-After` header (seconds until window resets) as an RFC 9457 ProblemDetails body when limit exceeded
@@ -107,10 +107,10 @@ Note: Routes use `/api/v{version}/api-key` (**singular** — not `/api1/keys` or
 
 ### Tests
 
-Note: HTTP-level tests ended up living in `Tests/Application` (real middleware, real in-memory app via `ApplicationFixture`) rather than `Tests/Integration`, which is still an empty `WebApplicationFactory` scaffold with no tests. Items below labeled "Integration:" are satisfied by `Tests/Application` coverage unless noted otherwise.
+Note: HTTP-level tests live in `Tests/Application` (`WebApplicationFactory` + Testcontainers PostgreSQL via `ApplicationFixture`). `Tests/Integration` holds infrastructure-level tests against real backing services (currently the Testcontainers Redis rate-limiter tests). Items below labeled "Integration:" are satisfied by `Tests/Application` coverage unless noted otherwise.
 
 - [x] Unit: `GlobalExceptionHandler` — verify correct status codes and ProblemDetails shape for all domain exceptions (`Tests/Unit/Handler/GlobalExceptionHandlerTests.cs`)
-- [x] Unit: domain state machine — covered as the terminal-state guard in `ApiKeyStatusRepository.SoftDeleteAsync` (`Tests/Unit/Services/Status/UpdateApiKeyStatusServiceTests.cs`, `Tests/Unit/Services/Status/GetApiKeyStatusServiceTests.cs`, `GetApiKeyStatusHistoryServiceTests.cs`); no full transition-matrix validation yet — still blocked on `RotateApiKey`/`RevokeApiKey`
+- [x] Unit: domain state machine — covered as the terminal-state guard in `ApiKeyStatusRepository.SoftDeleteAsync` (`Tests/Unit/Services/Status/UpdateApiKeyStatusServiceTests.cs`, `Tests/Unit/Services/Status/GetApiKeyStatusServiceTests.cs`, `GetApiKeyStatusHistoryServiceTests.cs`); there is no full transition matrix to validate — the guard is deliberately terminal-state only
 - [x] Unit: `CryptoService` — round-trip Encrypt/Decrypt, hash consistency, key derivation with Argon2id
 - [x] Unit: `CreateApiKeyService` — validation (ExpiresAt), key generation, salt derivation, encryption (`Tests/Unit/Services/CreateApiKeyServiceTests.cs`)
 - [x] Unit: idempotency hash matching — verify SHA-256 lookup hash compares correctly (covered via `CryptoServiceTests.HashForLookup_*`)
@@ -121,7 +121,7 @@ Note: HTTP-level tests ended up living in `Tests/Application` (real middleware, 
 - [x] Integration: all action management endpoints (happy path + error cases) — list/grant/revoke/replace happy paths, unknown-key `404`, duplicate-grant `409`, invalid-action-name `422`, revoke-not-granted `404`, re-grant-after-revoke, and missing-token `401` all covered (`ApiKeyActionEndpointTests`)
 - [x] Integration: authentication middleware — missing token returns `401`, invalid token returns `401` (`CreateApiKeyAuthorizationTests`, `RetrievalEndpointAuthorizationTests`); valid-token-allows-request is implicitly covered by the happy-path tests on each endpoint
 - [x] Integration: rate limiting — `429` after limit exceeded across all four `RateLimitFilter`-covered `GET` endpoints and all eight `CredentialRateLimitFilter`-covered mutation endpoints, with `Retry-After`/`X-RateLimit-*` headers and problem+json body, plus auth-precedes-limiter `401` (`RateLimitEndpointTests`, self-contained factory + `FakeRateLimiter`/`FakeGetApiKeyBySecretService`); real-Redis sliding-window arithmetic (allow/deny/remaining/reset, per-partition isolation) covered against a live Testcontainers Redis (`Tests/Integration/RateLimiting/RedisSlidingWindowRateLimiterTests`); backend-unavailable fail-open/closed and both filters' partitioning/disabled/reject behavior covered by mocks (`Tests/Unit/Filters`)
-- [ ] Application: full happy-path flow (issue → grant actions → activate → rotate → revoke) — status update now exists (`UpdateApiKeyStatusService`), still blocked on action/rotate/revoke services
+- [ ] Application: full happy-path flow in one test (issue → grant actions → activate → rotate → revoke) — every service exists and is covered individually; the end-to-end scenario test hasn't been written
 - [ ] Application: key expiry job transitions `Inactive`/`Active` keys to `Expired` — no Agent background job exists yet
 
 ---
@@ -142,14 +142,16 @@ Important for production readiness but not blocking initial functionality.
 - [ ] Serilog destructuring policy — redact the `Authorization` header value from all request-scoped log events; confirm raw keys are never written to any sink
 - [ ] Per-endpoint request body size limit — appropriate max size for key management payloads (a few KB)
 - [ ] CORS — configure allowed origins via `ApiSettings`; deny wildcard in production
-- [ ] `ApiKeyStatus` table — enforce append-only at the database layer (e.g., revoke `UPDATE`/`DELETE` privileges for the app user on this table)
+- [ ] Enforce append-only at the database layer — e.g., revoke `DELETE` (and `UPDATE` on everything except `DeletedAt`) for the app user on all four tables; today only the `AppDbContext` guard exists (see [database.md](Architecture/database.md#setting-up-database-privileges-production))
+- [ ] Add a `.dockerignore` so local files such as `.env` are excluded from the Docker build context
 
 ### API Polish
 
 - [ ] OpenAPI XML comments on all request/response types
 - [ ] Example request/response bodies in OpenAPI via `WithOpenApi()` or schema filters
-- [ ] `ETag` / `Last-Modified` on `GET /api/v1/keys/{keyId}` for conditional reads
-- [ ] Cursor-based list endpoint — `GET /api/v1/api-key/all?ownerId=&cursor=&limit=` for bulk queries (an offset/limit-based `GET /api/v{version}/api-key/all` already exists — see Must Have; this item is about moving to cursor pagination and adding `ownerId` filtering)
+- [ ] `ETag` / `Last-Modified` on the `X-Api-Key`-resolved reads (`GET /api/v{version}/api-key`, `.../status`, `.../actions`) for conditional reads
+- [ ] Accept enum names (not just integers) in request bodies — register `JsonStringEnumConverter` so `"actions": ["Read"]` / `"status": "Active"` work; responses already return names
+- [ ] Cursor-based list endpoint — `GET /api/v{version}/api-key/all?ownerId=&cursor=&limit=` for bulk queries (an offset/limit-based `GET /api/v{version}/api-key/all` already exists — see Must Have; this item is about moving to cursor pagination and adding `ownerId` filtering)
 
 ### Operations
 
@@ -171,7 +173,7 @@ Nice-to-have improvements; revisit when the above tiers are complete.
 
 ### DEK Rotation
 
-- [ ] DEK rotation procedure — re-encrypt all stored raw keys in a migration job when the DEK is rotated
+- [ ] Argon2id parameter migration — there is no shared DEK to rotate (each DEK is derived per key from its idempotency key + salt), but changing `CryptoSettings` makes existing secrets undecryptable unless the parameters used are stored per key; record them on `IdempotencyKey` or re-encrypt on next retrieval
 
 ### Developer Experience
 

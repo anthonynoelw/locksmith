@@ -1,6 +1,6 @@
 # What is Locksmith?
 
-Locksmith is a self-contained REST API service that manages the full lifecycle of API keys for internal services. Its job is simple to state: create API keys securely, control what those keys are allowed to do, and activate, rotate, and revoke them over time — while maintaining a permanent, tamper-evident audit trail of every state change. Today it covers all of that: creation, listing, secret validation and retrieval, status transitions (activate/deactivate/revoke), rotation, deletion, and per-key permission management. See [api-surface.md](Architecture/api-surface.md) for the exact endpoints, and [TODO.md](TODO.md) for what's still outstanding (mainly an automated expiry job and rate limiting on mutation endpoints).
+Locksmith is a self-contained REST API service that manages the full lifecycle of API keys for internal services. Its job is simple to state: create API keys securely, control what those keys are allowed to do, and activate, rotate, and revoke them over time — while maintaining a permanent, tamper-evident audit trail of every state change. Today it covers all of that: creation, listing, secret validation and retrieval, status transitions (activate/deactivate/revoke), rotation, deletion, and per-key permission management. See [api-surface.md](Architecture/api-surface.md) for the exact endpoints, and [TODO.md](TODO.md) for what's still outstanding (mainly an automated expiry job and client-supplied `Idempotency-Key` request deduplication).
 
 ## The problem it solves
 
@@ -31,7 +31,7 @@ State history is stored in a separate, **append-only** status table (`GET /api-k
 
 ### Per-key action permissions
 
-Not every API key should have the same privileges. Locksmith assigns actions to keys via a normalized junction table (`api_key_actions`), giving each key an independently configurable set of allowed operations:
+Not every API key should have the same privileges. Locksmith assigns actions to keys via a normalized junction table (`ApiKeyActions`), giving each key an independently configurable set of allowed operations:
 
 - `Read`
 - `Write`
@@ -54,6 +54,10 @@ Locksmith's own management endpoints are protected by a static bearer token: a s
 
 This approach was chosen because, at this stage, Locksmith has exactly one internal caller. JWT, OIDC, and mTLS all add complexity that buys nothing in a single-caller model. The trade-off is explicit: there is no per-caller identity and no granular revocation — if the token leaks, the only remedy is rotating the secret for all callers simultaneously. This decision carries an obligation to revisit authentication before a second independent caller is onboarded.
 
+### Rate limiting
+
+Every endpoint that targets an existing key is rate limited through a Redis-backed sliding window that holds across multiple API instances. Reads are partitioned by the resolved key; mutations by a hash of the credential in the request body. Over-quota requests get `429` with `Retry-After`, and every limited response carries `X-RateLimit-*` headers. Only `create` and `list all` are unthrottled, since neither targets an existing key. See [api-surface.md](Architecture/api-surface.md#rate-limiting).
+
 ## What Locksmith will do next
 
 The following capabilities are designed but not yet built — see [TODO.md](TODO.md) for exact status:
@@ -63,7 +67,6 @@ The following capabilities are designed but not yet built — see [TODO.md](TODO
 - Automated key expiry — an Agent background job that transitions keys to `Expired` once `expiresAt` has passed; today expiry only happens if a caller sets it manually via `PATCH /api-key/status`
 
 **Operational capabilities**
-- Rate limiting on the `idempotencyKey`-identified mutation endpoints — the four `X-Api-Key`-resolved reads are already limited per key via a Redis-backed sliding window
 - OpenTelemetry traces and metrics
 - CORS configuration for cross-origin callers
 
@@ -72,8 +75,8 @@ The following capabilities are designed but not yet built — see [TODO.md](TODO
 
 ## Key design principles
 
-- **Hash at rest, never store secrets.** Raw keys are ephemeral. Only hashes and salts live in the database.
+- **Never store secrets in plaintext.** Secrets are looked up by SHA-256 hash and stored only as AES-256-GCM ciphertext, under a key that can only be re-derived from the idempotency key the caller holds.
 - **Append-only audit log.** State transitions are new rows, not updates. Evidence of what happened and when is never overwritten.
-- **Least privilege by default.** Keys are inactive at creation and carry no permissions until explicitly granted.
-- **Constant-time comparisons everywhere.** All token and key comparisons use timing-safe equality to prevent side-channel attacks.
+- **Least privilege by default.** Keys are inactive at creation and carry only the actions explicitly requested at creation or granted afterward — none by default.
+- **Constant-time comparison where it matters.** The management bearer token is checked with timing-safe equality; secrets and idempotency keys are matched by hash through a database index rather than compared in process.
 - **Bounded blast radius.** A compromised key can only do what its specific permissions allow. A leaked management token can be rotated without touching key data.

@@ -1,33 +1,48 @@
 # Docker Setup
 
-This directory contains the Docker configuration for building and running Locksmith locally.
+How to build and run Locksmith in containers for local development.
 
-## Structure
+## Files
 
-- **Dockerfile** — multi-stage build parameterized by `PROJECT_NAME`/`PROJECT_PATH`, used to build both `Api` and `Agent` from the same file
-- **docker-compose.yml** — local development stack: `api`, `worker` (the Agent), `postgres`, `redis`
+- **`Docker/Dockerfile`** — multi-stage build parameterized by `PROJECT_NAME`/`PROJECT_PATH`, used to build both `Api` and `Agent` from the same file
+- **`docker-compose.yml`** (repo root) — local development stack: `api`, `worker` (the Agent), `postgres`, `redis`
+- **`.env.example`** (repo root) — template for the `.env` file Compose reads
 
 ## Quick start
 
+Run from the repository root:
+
 ```bash
 cp .env.example .env   # then edit values if needed
-docker-compose -f Docker/docker-compose.yml up --build
+docker compose up --build
 ```
 
 This builds and starts four services:
 
-| Service | Container name | Built from |
+| Service | Container name | Built from / image |
 |---|---|---|
 | `api` | `locksmith-api` | `Src/Api/Api.csproj` |
 | `worker` | `locksmith-worker` | `Src/Agent/Agent.csproj` |
 | `postgres` | `locksmith-db` | `postgres:${POSTGRES_VERSION}-alpine` |
 | `redis` | `locksmith-redis` | `redis:${REDIS_VERSION}-alpine` |
 
-`api` and `worker` both wait on `postgres` and `redis` passing their healthchecks before starting.
+`api` and `worker` both wait for `postgres` and `redis` to pass their healthchecks before starting. Both run with `ASPNETCORE_ENVIRONMENT=Development`, so the OpenAPI document and Scalar UI are available at `http://localhost:8080/openapi/v1.json` and `http://localhost:8080/scalar/v1`.
+
+Postgres and Redis data persist in the named volumes `postgres_data` and `redis_data`. Remove them with `docker compose down -v`.
+
+### Only the backing services
+
+To run the API/Agent with `dotnet run` on your machine but keep Postgres and Redis in containers:
+
+```bash
+docker compose up postgres redis
+```
+
+The default `appsettings.Development.json` connection strings already point at `localhost:5432` / `localhost:6379`.
 
 ## Configuration (`.env`)
 
-`docker-compose.yml` reads its variables from a `.env` file at the repo root (see `.env.example`). This file is **only** used by Compose — it is not read by `dotnet run` for local development (see the root `CLAUDE.md` for that).
+`docker-compose.yml` reads its variables from a `.env` file at the repo root (see `.env.example`). This file is **only** used by Compose — it is not read by `dotnet run` (see [.claude/CLAUDE.md](../../.claude/CLAUDE.md) for local configuration).
 
 | Variable | Purpose |
 |---|---|
@@ -40,7 +55,9 @@ This builds and starts four services:
 | `ConnectionStrings__Redis` | Redis connection string, using `redis` as the hostname |
 | `Api__BearerToken` | Static bearer token the API validates on every management request — change this for anything beyond local dev |
 
-## Building a single project manually
+Any other setting (`Cryptography__*`, `RateLimiting__*`, `Cache__*`) can be added to `.env` the same way; otherwise the values from `appsettings.json` apply.
+
+## Building a single image manually
 
 ```bash
 docker build \
@@ -52,43 +69,46 @@ docker build \
 
 Swap `PROJECT_NAME=Agent` / `PROJECT_PATH=Src/Agent` to build the worker instead.
 
+## Health checks
+
+- The Dockerfile's `HEALTHCHECK` is a **process check** (`pgrep -f "${PROJECT_NAME}.dll"`), so it works for the non-HTTP worker too.
+- In `docker-compose.yml`, the `api` service overrides it with an HTTP probe: `curl -f http://localhost:${API_CONTAINER_PORT}/health` (the unauthenticated liveness endpoint). `curl` is installed in the runtime image for this purpose.
+
 ## Development tips
 
 ### Hot reload
 
-Uncomment the `command` line under the `api` (or `worker`) service in `docker-compose.yml`:
+The compiled image does not support `dotnet watch`. For hot reload, run the API with `dotnet watch` on the host against the containerized backing services:
 
-```yaml
-services:
-  api:
-    command: dotnet watch run --project Src/Api/Api.csproj
+```bash
+docker compose up -d postgres redis
+dotnet watch run --project Src/Api/Api.csproj
 ```
 
 ### Running a single service
 
 ```bash
-docker-compose -f Docker/docker-compose.yml up api
+docker compose up api
 ```
 
 ## Security notes
 
-- Images run as the non-root user `dotnetapp`.
-- `.dockerignore` excludes dev files and secrets from the build context.
-- The Dockerfile's `HEALTHCHECK` hits `/health` (the unauthenticated liveness probe).
-- No app host — keeps the runtime image portable.
-- `Api__BearerToken` and the Postgres/Redis credentials in `.env` are for local development only; never commit a populated `.env` file (it's gitignored) and never reuse the sample values in staging/production — see the root `CLAUDE.md` for how those are set outside Docker Compose.
+- Images run as the non-root user `dotnetapp` (UID 1000), with app files owned by that user and unreadable to others.
+- The build context is the repo root. There is **no `.dockerignore`** yet, so everything not excluded by Docker defaults (including a local `.env`) is sent to the build context. It is not copied into the image (the Dockerfile only copies `Src/`, `Tests/`, and the solution/props files), but adding a `.dockerignore` is recommended.
+- The runtime image is built with `UseAppHost=false`, so the container runs `dotnet <Project>.dll` instead of a native host executable.
+- `Api__BearerToken` and the Postgres/Redis credentials in `.env` are for local development only. Never commit a populated `.env` file (it's gitignored), and never reuse the sample values in staging/production — see [.claude/CLAUDE.md](../../.claude/CLAUDE.md) for how those are set outside Docker Compose.
+- Compose publishes the Postgres and Redis ports to the host for convenience. Don't do that outside local development.
 
 ## Troubleshooting
 
 **"Could not find project"**
-- Check `PROJECT_PATH`/`PROJECT_NAME` build args match an actual `Src/<Project>/<Project>.csproj`.
-- Ensure the solution file exists at the repo root.
+- Check that the `PROJECT_PATH`/`PROJECT_NAME` build args match an actual `Src/<Project>/<Project>.csproj`.
 
 **`api`/`worker` won't start — waiting on `postgres`/`redis`**
-- Both services declare `depends_on` with `condition: service_healthy`. Check `docker-compose -f Docker/docker-compose.yml ps` and the healthcheck logs for `postgres`/`redis` first.
+- Both services declare `depends_on` with `condition: service_healthy`. Check `docker compose ps` and the healthcheck logs for `postgres`/`redis` first.
+
+**API exits immediately with an options validation error**
+- A required setting is missing — usually `Api__BearerToken` in `.env`.
 
 **"Port already in use"**
-- Change the relevant `*_HOST_PORT` value in `.env`, or override at the CLI:
-  ```bash
-  docker run -p 8081:8080 locksmith-api:latest
-  ```
+- Change the relevant `*_HOST_PORT` value in `.env`.

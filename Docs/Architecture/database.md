@@ -1,263 +1,223 @@
 # Database Schema
 
-Locksmith's database stores API keys securely across four tables designed around four core principles: **hash at rest** (never store raw secrets in plaintext), **append-only audit trail** (state transitions are immutable records), **least privilege defaults** (keys start inactive with no permissions), and **forensic evidence** (soft deletes preserve the moment permissions were revoked).
+Locksmith stores API keys in PostgreSQL across four tables, managed by EF Core (Npgsql) migrations in `Src/Infrastructure/Migrations/`. The design rests on four principles:
+
+- **No plaintext secrets** — secrets are looked up by hash and stored only as ciphertext.
+- **Append-only audit trail** — state and permission changes are new rows, never updates.
+- **Least privilege defaults** — keys start `Inactive`, with only the actions explicitly requested.
+- **Forensic evidence** — soft deletes record *when* something was revoked instead of erasing it.
+
+Table and column names are EF Core defaults: **PascalCase**, quoted in SQL (`"ApiKeys"."SecretHash"`).
 
 ## Schema overview
 
-Four entities model the domain. Each enforces immutability constraints at the application layer to prevent accidental mutations.
-
 ```mermaid
 erDiagram
-    API_KEYS ||--o{ API_KEY_STATUSES : "has statuses"
-    API_KEYS ||--o{ API_KEY_ACTIONS : "has actions"
-    API_KEYS ||--o{ IDEMPOTENCY_KEYS : "has idempotency keys"
-    
-    API_KEYS {
-        uuid id PK
-        string secret "encrypted ciphertext"
-        string secret_hash UK
-        timestamp created_at
-        string created_by
-        timestamp expires_at
+    ApiKeys ||--o{ ApiKeyStatuses : "has statuses"
+    ApiKeys ||--o{ ApiKeyActions : "has actions"
+    ApiKeys ||--o{ IdempotencyKeys : "has idempotency keys"
+
+    ApiKeys {
+        uuid Id PK
+        text Secret "AES-256-GCM ciphertext (base64)"
+        text SecretHash UK
+        timestamptz CreatedAt
+        text CreatedBy
+        timestamptz ExpiresAt
     }
-    
-    IDEMPOTENCY_KEYS {
-        uuid id PK
-        uuid api_key_id FK
-        string idempotency_key_hash UK
-        string salt "for DEK derivation"
-        timestamp created_at
-        string created_by
-        timestamp deleted_at "soft delete"
+
+    IdempotencyKeys {
+        uuid Id PK
+        uuid ApiKeyId FK
+        text IdempotencyKeyHash UK
+        text Salt "Argon2id salt (base64)"
+        timestamptz CreatedAt
+        text CreatedBy
+        timestamptz DeletedAt "nullable, soft delete"
     }
-    
-    API_KEY_STATUSES {
-        uuid id PK
-        uuid api_key_id FK
-        string status "Inactive|Active|Revoked|Expired"
-        timestamp created_at
-        string created_by
-        timestamp deleted_at "soft delete"
+
+    ApiKeyStatuses {
+        uuid Id PK
+        uuid ApiKeyId FK
+        integer Status "0 Inactive, 1 Active, 2 Revoked, 3 Expired"
+        timestamptz CreatedAt
+        text CreatedBy
+        timestamptz DeletedAt "nullable, soft delete"
     }
-    
-    API_KEY_ACTIONS {
-        uuid id PK
-        uuid api_key_id FK
-        string action "Read|Write|Delete|Execute"
-        timestamp created_at
-        string created_by
-        timestamp deleted_at "soft delete"
+
+    ApiKeyActions {
+        uuid Id PK
+        uuid ApiKeyId FK
+        integer Action "0 Read, 1 Write, 2 Delete, 3 Execute"
+        timestamptz CreatedAt
+        text CreatedBy
+        timestamptz DeletedAt "nullable, soft delete"
     }
 ```
+
+Column types are as generated: `uuid`, `text` (no length limits), `integer` for enums, and `timestamp with time zone`. No column has a database default — every value, including `CreatedAt`, is set by the application.
+
+`CreatedBy` is always the constant `"api-client"` (`WellKnown.CallerIdentities.API_CLIENT`). With a single static bearer token there is no per-caller identity to record, and the token itself must never be persisted.
 
 ---
 
 ## Tables
 
-### `api_keys`
+### `ApiKeys`
 
-The identity and metadata table for API keys. A key record is created once at issuing time and never updated — it is the immutable anchor for all state and permission history.
+The identity and metadata table. A key row is created once at issuance and never updated — it is the immutable anchor for all state and permission history.
 
 | Column | Type | Constraints | Purpose |
 |---|---|---|---|
-| `id` | UUID | Primary Key | Unique identifier for the key |
-| `secret` | VARCHAR (max) | Not Null | Encrypted ciphertext of the raw API key secret; encrypted with AES-256-GCM using a derived encryption key (DEK) |
-| `secret_hash` | VARCHAR(256) | Unique, Not Null | SHA-256 hash of the raw secret used for O(1) lookups; stored for validation without exposing the plaintext |
-| `created_at` | TIMESTAMP | Not Null, Default: NOW | Moment the key was issued |
-| `created_by` | VARCHAR(255) | Not Null | Identity of the caller who issued the key (from the `Authorization` header); enables per-caller audit |
-| `expires_at` | TIMESTAMP | Not Null | Moment the key expires and becomes invalid |
+| `Id` | `uuid` | PK | Unique identifier for the key |
+| `Secret` | `text` | Not null | `nonce ‖ ciphertext ‖ tag` of the raw secret, base64. Encrypted with AES-256-GCM under a per-key DEK |
+| `SecretHash` | `text` | Not null, unique | Base64 SHA-256 of the raw secret, used for lookups by secret |
+| `CreatedAt` | `timestamptz` | Not null | Moment the key was issued |
+| `CreatedBy` | `text` | Not null | Always `"api-client"` |
+| `ExpiresAt` | `timestamptz` | Not null | Expiry moment (defaults to 30 days after creation). Nothing acts on it automatically yet |
 
-**Immutability enforced:** `ApiKey` implements `IAppendOnlyTable` like the other three tables (see [Constraints and integrity](#constraints-and-integrity)), but unlike them it has no `deleted_at` column at all — there is no soft-delete path for this table, only insert. `DELETE /api-key` (see [api-surface.md](api-surface.md#delete-a-key)) never touches this row; it soft-deletes the related `api_key_statuses`, `api_key_actions`, and `idempotency_keys` rows instead, leaving the key record as a permanent, unreachable anchor. State transitions are tracked in the separate `api_key_statuses` table; permission changes go to `api_key_actions`.
-
-**Why this design:**
-- Storing only the hash ensures that if the database is compromised, an attacker cannot use raw keys to forge authentication tokens.
-- The encrypted secret is stored but useless without decryption — requires the salt and Argon2id-derived key from the idempotency record.
-- No mutable state on the key itself creates an immutable audit anchor.
+**Immutability:** `ApiKey` implements `IAppendOnlyTable` like the other three tables (see [Append-only enforcement](#append-only-enforcement)). Unlike them, it has no `DeletedAt` column, so the only allowed operation is insert. `DELETE /api-key` (see [api-surface.md](api-surface.md#delete-a-key)) never touches this row. It soft-deletes the related `ApiKeyStatuses`, `ApiKeyActions`, and `IdempotencyKeys` rows instead.
 
 ---
 
-### `idempotency_keys`
+### `IdempotencyKeys`
 
-Links each API key to the idempotency key provided at creation time. Stores the salt needed to re-derive the encryption key (DEK) for decrypting the raw secret. This table is separate to allow idempotent retrieval: present the original idempotency key, hash it, look up the salt, and decrypt the secret.
+Links each API key to the server-generated idempotency key returned at creation (or rotation). It stores the hash used to find the key and the salt needed to re-derive the DEK.
 
 | Column | Type | Constraints | Purpose |
 |---|---|---|---|
-| `id` | UUID | Primary Key | Unique identifier for this idempotency record |
-| `api_key_id` | UUID | Foreign Key → api_keys.id, Not Null | Links to the key |
-| `idempotency_key_hash` | VARCHAR(256) | Unique, Not Null | SHA-256 hash of the client-provided `Idempotency-Key` header; enables O(1) lookup on retry |
-| `salt` | VARCHAR(256) | Not Null | Random salt used to derive the Data Encryption Key (DEK) via Argon2id; unique per key |
-| `created_at` | TIMESTAMP | Not Null, Default: NOW | Moment the idempotency record was created (same as the key) |
-| `created_by` | VARCHAR(255) | Not Null | Identity of the caller who created the key |
-| `deleted_at` | TIMESTAMP | Nullable | Soft-delete timestamp; set when the key is deleted (`DELETE /api-key`), which stops the idempotency key from resolving to the key at all |
+| `Id` | `uuid` | PK | Unique identifier for this record |
+| `ApiKeyId` | `uuid` | FK → `ApiKeys.Id`, not null | The key this record belongs to |
+| `IdempotencyKeyHash` | `text` | Not null, unique | Base64 SHA-256 of the idempotency key Locksmith generated and returned to the caller |
+| `Salt` | `text` | Not null | Random 32-byte salt (base64) for Argon2id DEK derivation; unique per key |
+| `CreatedAt` | `timestamptz` | Not null | Same moment as the key |
+| `CreatedBy` | `text` | Not null | Always `"api-client"` |
+| `DeletedAt` | `timestamptz` | Nullable | Set by `DELETE /api-key` or rotation. From then on the idempotency key no longer resolves |
 
-**Immutability enforced:** Implements `IAppendOnlyTable`. Cannot be updated; can only be inserted or soft-deleted via `DeletedAt`.
-
-**Why separate table:**
-- Decryption requires the salt. If salt lived on the key, every key lookup would expose it even when not needed.
-- Separating idempotency concerns from key metadata clarifies the domain model.
-- Allows `CreateApiKey` to be idempotent: same `Idempotency-Key` → same salt → same DEK → same decrypted secret returned.
+Every mutating endpoint except create and validate finds its target key through this table, by hashing the `idempotencyKey` in the request body.
 
 ---
 
-### `api_key_statuses`
+### `ApiKeyStatuses`
 
-An append-only history of state transitions. Every time a key moves to a new state (Inactive → Active, Active → Revoked, etc.), a new row is inserted. The table is never updated; it only grows.
+An append-only history of state transitions. Each transition soft-deletes the current row and inserts a new one, so the table only grows.
 
 | Column | Type | Constraints | Purpose |
 |---|---|---|---|
-| `id` | UUID | Primary Key | Unique identifier for this status record |
-| `api_key_id` | UUID | Foreign Key → api_keys.id, Not Null | Links this status to a key |
-| `status` | VARCHAR(32) | Not Null, Enum: `Inactive` \| `Active` \| `Revoked` \| `Expired` | The state the key entered at this moment |
-| `created_at` | TIMESTAMP | Not Null, Default: NOW | Moment the transition occurred; defines the timeline |
-| `created_by` | VARCHAR(255) | Not Null | Identity of the caller who triggered the state change |
-| `deleted_at` | TIMESTAMP | Nullable | Soft-delete timestamp; preserves the record even after logical deletion |
+| `Id` | `uuid` | PK | Unique identifier for this status record |
+| `ApiKeyId` | `uuid` | FK → `ApiKeys.Id`, not null | The key this status belongs to |
+| `Status` | `integer` | Not null | `ApiKeyStatusEnum`: `0` Inactive, `1` Active, `2` Revoked, `3` Expired |
+| `CreatedAt` | `timestamptz` | Not null | Moment the transition occurred; defines the timeline |
+| `CreatedBy` | `text` | Not null | Always `"api-client"` |
+| `DeletedAt` | `timestamptz` | Nullable | Set when this status is superseded or the key is deleted |
 
-**Immutability enforced at two levels:**
+The **current** status is the newest row whose `DeletedAt` is null. History reads (`GET .../status/history`) return every row, including soft-deleted ones.
 
-1. **Application layer:** `AppDbContext.SaveChanges`/`SaveChangesAsync` walks the change tracker before every write and throws `AppendOnlyViolationException` if any `IAppendOnlyTable` entity (all four tables, not just this one) is `Deleted`, or `Modified` with a change to any property other than `DeletedAt`. This is one shared guard, not a per-table configuration.
-2. **Database layer (recommended, not yet applied):** Revoke `UPDATE` and `DELETE` privileges for the application user on this table:
-   ```sql
-   REVOKE UPDATE, DELETE ON api_key_statuses FROM app_user;
-   GRANT SELECT, INSERT ON api_key_statuses TO app_user;
-   ```
-
-**Status transition guard:**
-
-`PATCH /api-key/status` (see [api-surface.md](api-surface.md#update-a-keys-status)) is a **terminal-state check, not a full transition matrix**. `ApiKeyStatusRepository.SoftDeleteAsync` rejects the change — throwing `ConflictException` before any write — only when the *current* status is already `Revoked` or `Expired`:
+**Status transition guard:** `PATCH /api-key/status` (see [api-surface.md](api-surface.md#update-a-keys-status)) uses a **terminal-state check, not a full transition matrix**. Before any write, `ApiKeyStatusRepository.SoftDeleteAsync` throws `ConflictException` (`409`) when the *current* status is already `Revoked` or `Expired`:
 
 ```
-Any non-terminal status ──(any status)──> Inactive | Active | Revoked | Expired
+Inactive | Active ──(any status)──> Inactive | Active | Revoked | Expired
 
 Revoked  ──X──> (blocked, 409)
 Expired  ──X──> (blocked, 409)
 ```
 
-There is no dedicated validation of the target status against the current one beyond that check — for example, the application does not reject `Inactive → Expired` even though nothing sets it automatically outside `PATCH .../status` today (no Agent expiry job exists yet).
-
 ---
 
-### `api_key_actions`
+### `ApiKeyActions`
 
-A junction table linking keys to their granted permissions. Each row represents a single grant of a single action. To add a permission, insert a row; to revoke it, soft-delete the row.
+A junction table linking keys to their granted permissions. Each row is one grant of one action. Granting inserts a row; revoking soft-deletes it.
 
 | Column | Type | Constraints | Purpose |
 |---|---|---|---|
-| `id` | UUID | Primary Key | Unique identifier for this grant |
-| `api_key_id` | UUID | Foreign Key → api_keys.id, Not Null | Links this grant to a key |
-| `action` | VARCHAR(32) | Not Null, Enum: `Read` \| `Write` \| `Delete` \| `Execute` | The action being granted |
-| `created_at` | TIMESTAMP | Not Null, Default: NOW | Moment the permission was granted |
-| `created_by` | VARCHAR(255) | Not Null | Identity of the caller who granted this permission |
-| `deleted_at` | TIMESTAMP | Nullable | Soft-delete timestamp; records when the permission was revoked |
+| `Id` | `uuid` | PK | Unique identifier for this grant |
+| `ApiKeyId` | `uuid` | FK → `ApiKeys.Id`, not null | The key this grant belongs to |
+| `Action` | `integer` | Not null | `ApiKeyActionEnum`: `0` Read, `1` Write, `2` Delete, `3` Execute |
+| `CreatedAt` | `timestamptz` | Not null | Moment the permission was granted |
+| `CreatedBy` | `text` | Not null | Always `"api-client"` |
+| `DeletedAt` | `timestamptz` | Nullable | Moment the permission was revoked |
 
-**Unique constraint:** `(api_key_id, action)` — a key cannot be granted the same action twice (including soft-deleted duplicates).
-
-**Immutability enforced:** Implements `IAppendOnlyTable`. Cannot be updated; inserts and soft-deletes only.
+**Active-grant uniqueness:** a **partial** unique index on `(ApiKeyId, Action)` filtered to `"DeletedAt" IS NULL` allows at most one *active* grant per action per key. Revoked (soft-deleted) rows are excluded, so an action can be revoked and granted again any number of times, leaving a full history. This index is the authoritative guard against concurrent duplicate grants.
 
 ---
 
 ## Indexes
 
-These indexes support common query patterns:
+| Index | Table | Columns | Purpose |
+|---|---|---|---|
+| `IX_ApiKeys_SecretHash` | `ApiKeys` | `SecretHash` (unique) | Look up a key by presented secret (`X-Api-Key`, validate) |
+| `IX_IdempotencyKeys_IdempotencyKeyHash` | `IdempotencyKeys` | `IdempotencyKeyHash` (unique) | Look up a key by idempotency key (all mutations) |
+| `IX_IdempotencyKeys_ApiKeyId` | `IdempotencyKeys` | `ApiKeyId` | FK index |
+| `IX_ApiKeyStatuses_ApiKeyId_CreatedAt` | `ApiKeyStatuses` | `(ApiKeyId, CreatedAt DESC)` | Find the most recent status for a key |
+| `IX_ApiKeyActions_ApiKeyId` | `ApiKeyActions` | `ApiKeyId` | Find all actions for a key |
+| `IX_ApiKeyActions_ApiKeyId_Action_Active` | `ApiKeyActions` | `(ApiKeyId, Action)` unique, `WHERE "DeletedAt" IS NULL` | At most one active grant per action |
 
-| Index | Columns | Purpose |
-|---|---|---|
-| `idx_api_keys_secret_hash` | `secret_hash` (Unique) | O(1) lookup when validating a presented key |
-| `idx_idempotency_keys_hash` | `idempotency_key_hash` (Unique) | O(1) lookup for idempotent retry |
-| `idx_api_key_statuses_api_key_created` | `(api_key_id, created_at DESC)` | Find the most recent status for a key efficiently |
-| `idx_api_key_actions_api_key_id` | `api_key_id` | Find all actions for a key |
+---
+
+## Foreign keys
+
+`IdempotencyKeys.ApiKeyId`, `ApiKeyStatuses.ApiKeyId`, and `ApiKeyActions.ApiKeyId` all reference `ApiKeys.Id` with **`ON DELETE CASCADE`** (the EF Core default for required relationships).
+
+The application never hard-deletes an `ApiKeys` row (the append-only guard forbids it), so the cascade never fires in normal operation. A manual `DELETE FROM "ApiKeys"` run outside the application, however, **would** erase that key's entire audit history. That is one more reason to apply the [database privileges](#setting-up-database-privileges-production) below.
+
+---
+
+## Append-only enforcement
+
+All four entities implement `Domain.IAppendOnlyTable`. Enforcement is **application-layer only**, in `AppDbContext.SaveChanges`/`SaveChangesAsync`. Before delegating to EF Core, it walks the change tracker and throws `AppendOnlyViolationException` (surfaced as `500`) when any `IAppendOnlyTable` entity is:
+
+- `Deleted` (a hard delete), or
+- `Modified` with a change to any property other than `DeletedAt`.
+
+This single guard covers all four tables. Soft-deleting via `DeletedAt` is the only update ever allowed, and `ApiKey`, which has no `DeletedAt`, can never change after insert.
+
+There is **no database-level enforcement yet**. The `AddAppendOnlyConstraints` migration is empty, and no privileges are revoked. Anything that connects with the application's credentials outside EF Core (psql, another tool, a compromised process) can still update or delete rows. See [Setting up database privileges](#setting-up-database-privileges-production) for the recommended fix.
 
 ---
 
 ## Design decisions
 
-### Why separate `idempotency_keys` from `api_keys`?
+### Why separate `IdempotencyKeys` from `ApiKeys`?
 
-The idempotency key and salt are tightly coupled at creation time, but they have different lifecycles and concerns:
+- **`ApiKeys`** holds the immutable identity and metadata, plus the encrypted secret.
+- **`IdempotencyKeys`** holds what's needed to *act on* a key: the lookup hash for mutations and the salt for decryption. Deleting or rotating a key soft-deletes this row, which cuts off every management operation in one step while the `ApiKeys` row and its history stay intact.
 
-- **api_keys** — stores the immutable key identity and metadata; returned to the caller exactly once.
-- **idempotency_keys** — stores the salt needed to decrypt the secret; enables idempotent retrieval; soft-deletes when the key is deleted (`DELETE /api-key`).
+Keeping the salt off `ApiKeys` also means key metadata reads never load it.
 
-Separating them makes the domain clearer: key creation is idempotent (same idempotency key → same secret), while key retrieval uses the idempotency key as the lookup key.
+### Why hash the secret *and* encrypt it?
 
-### Why is the salt stored in `idempotency_keys`?
+The two solve different problems:
 
-The salt is derived from the client-provided `Idempotency-Key` header at creation time via Argon2id. It is needed to re-derive the Data Encryption Key (DEK) when decrypting the stored `secret` ciphertext.
+- **`SecretHash`** (SHA-256, no salt) gives an exact-match index lookup when a caller presents a secret. The secret is 32 random bytes, so a salt adds nothing: there's no dictionary to precompute against.
+- **`Secret`** (AES-256-GCM ciphertext) lets the caller recover the raw secret later via `POST /api-key/secret`, without Locksmith ever storing plaintext.
 
-Storing salt on the key itself would expose it on every key metadata lookup. By storing it separately, the key table remains lean and immutable.
+The encryption key (DEK) is derived per key with **Argon2id from the plaintext idempotency key plus the stored `Salt`**. The idempotency key is never stored (only its hash), so the database alone holds neither the plaintext nor the means to decrypt it. Presenting the wrong idempotency key derives the wrong DEK, and the GCM tag check fails (`DecryptionFailedException` → `422`). Losing the idempotency key makes the secret unrecoverable. See [ADR-002](../Decisions/ADR-002-api-key-creation.md).
 
-### Why hash at rest?
-
-Raw API keys are secrets equivalent to passwords. Storing them in plaintext means:
-- Any database leak exposes all active keys immediately.
-- No recovery possible; revocation and reissue are the only remedy.
-- Compliance frameworks (PCI-DSS, HIPAA, SOC 2) explicitly forbid plaintext secrets.
-
-Hashing ensures:
-- Even a database compromise does not compromise key material.
-- Validation re-hashes the presented value and looks it up by the unique hash index (a SQL equality match, not an in-process constant-time comparison — see [Data validation at application boundaries](#data-validation-at-application-boundaries)).
-- Raw keys are returned exactly once at creation (or rotation); after that, only the hash is persisted.
-
-### Why encrypt the secret as well as hash it?
-
-The `secret_hash` is used for O(1) lookups and validation. But the application also needs to return the **raw** key to the caller on creation, and to the caller again on retrieval (via idempotency key). This requires storing the raw secret somewhere.
-
-Storing raw plaintext is unsafe. Instead:
-- The raw secret is encrypted with AES-256-GCM using a DEK derived from the salt.
-- The ciphertext is stored; the plaintext is discarded.
-- On retrieval, the salt is used to re-derive the DEK, which decrypts the ciphertext.
-
-This gives us the best of both worlds: O(1) hashed lookup AND the ability to retrieve the raw secret when needed.
+> **Note:** the Argon2id parameters (`CryptoSettings`) aren't stored per key. Changing them after keys exist makes those keys' secrets undecryptable — see [TODO.md](../TODO.md).
 
 ### Why append-only for state history?
 
-State transitions are forensic events. A complete timeline of who changed what and when is essential for:
+State transitions are forensic events. A complete timeline of what changed and when is essential for:
 
-- **Audit compliance:** Prove that a key was revoked at a specific moment.
-- **Forensic investigation:** Trace the exact sequence of state changes if a key's security is questioned.
-- **Preventing tampering:** Append-only constraints at both application and database levels make it very hard to retroactively alter history.
-
-If a key's state is ever modified directly (e.g., `UPDATE api_key_statuses SET status = 'Active' WHERE id = X`), audit logs become unreliable and forensics become impossible.
+- **Audit:** proving that a key was revoked at a specific moment.
+- **Forensic investigation:** tracing the exact sequence of state changes if a key's security is questioned.
+- **Tamper resistance:** history is never rewritten through the application. Database privileges (recommended below) would extend that to direct access.
 
 ### Why soft deletes?
 
-Soft deletes (`DeletedAt` column) preserve evidence. When a key is revoked or a permission is revoked, the record is not physically deleted — it is marked with a soft-delete timestamp.
-
-This enables:
-- Audit queries: "When was this permission revoked?"
-- Forensic recovery: "What was the full timeline of this key?"
-- Compliance: Proof that a state change occurred and when.
-
-Hard deletes would destroy this evidence forever.
+A `DeletedAt` timestamp preserves evidence. When a permission is revoked or a status superseded, the row stays and records the moment it stopped applying. That enables audit queries ("when was this permission revoked?") and full timeline reconstruction. Hard deletes would destroy this evidence.
 
 ---
 
-## Constraints and integrity
+## Validation at application boundaries
 
-### Unique constraints
+The schema enforces **structural integrity** (unique and partial-unique indexes, foreign keys). Business rules live in the application:
 
-- `api_keys.secret_hash` — one key per unique secret hash
-- `idempotency_keys.idempotency_key_hash` — one idempotency record per unique client-provided key
-- `api_key_actions(api_key_id, action)` — a key cannot be granted the same action twice
-
-### Foreign keys
-
-- `idempotency_keys.api_key_id` → `api_keys.id`
-- `api_key_statuses.api_key_id` → `api_keys.id`
-- `api_key_actions.api_key_id` → `api_keys.id`
-
-No cascading deletes — keys should never be hard-deleted in production. The append-only design assumes keys and their history are permanent.
-
----
-
-## Data validation at application boundaries
-
-The database schema enforces **structural integrity** (unique constraints, foreign keys) but **not business logic**. The application layer is responsible for:
-
-- **Terminal-state validation** — reject a status change (`409`) when the key's current status is already `Revoked` or `Expired`; see [Status transition guard](#api_key_statuses) above.
-- **Permission validation** — reject attempts to grant an action the key already has (`409`), backstopped by the partial unique index at the database layer for concurrent grants.
-- **Append-only enforcement** — throw `AppendOnlyViolationException` if code attempts to modify or delete an `IAppendOnlyTable` entity.
-- **Constant-time comparison** — `CryptographicOperations.FixedTimeEquals` protects the bearer-token check only. Secret and idempotency-key lookups go through a SQL equality match on the hashed value (`secret_hash`/`idempotency_key_hash`), not an in-process byte comparison.
-- **Decryption** — use the salt from `idempotency_keys` to re-derive the DEK, which decrypts the ciphertext stored in `api_keys.secret`.
+- **Terminal-state guard** — reject a status change (`409`) when the current status is `Revoked` or `Expired`.
+- **Duplicate grant** — reject granting an already-active action (`409`), backstopped by the partial unique index for concurrent requests.
+- **Append-only** — `AppendOnlyViolationException` on any forbidden modification.
+- **Lookups** — secrets and idempotency keys are matched by hash through a SQL equality lookup on the unique indexes. `CryptographicOperations.FixedTimeEquals` is used only for the bearer-token check.
+- **Decryption** — the stored `Salt` plus the caller's idempotency key re-derive the DEK that decrypts `ApiKeys.Secret`.
 
 ---
 
@@ -265,48 +225,32 @@ The database schema enforces **structural integrity** (unique constraints, forei
 
 ### Append-only table growth
 
-Over time, `api_key_statuses` will grow as keys transition through states (create → activate → deactivate → revoke). The `api_key_actions` table will grow similarly (grant → revoke → grant again).
+`ApiKeyStatuses` and `ApiKeyActions` grow with every transition and grant/revoke cycle. For long-lived deployments, consider archiving keys that have been `Revoked`/`Expired`/deleted beyond a retention window (e.g., 2 years) into separate archive tables, keeping the hot tables lean. The append-only rule still applies to the archive.
 
-For long-lived systems, archival strategy is recommended:
+### Main query patterns
 
-- **Archive old records** — Move completed keys (those in `Revoked` or `Expired` state with no recent activity) to a separate archive table after a retention window (e.g., 2 years).
-- **Keep active records hot** — Keep only active or recently-transitioned keys in the main tables for query performance.
-
-The append-only design is non-negotiable for audit compliance, but archival keeps the active table lean.
-
-### Query patterns to support
-
-The most common queries are:
-
-1. **Find a key by secret hash** — `SELECT * FROM api_keys WHERE secret_hash = ?` (uses unique index)
-2. **Find the current status of a key** — `SELECT * FROM api_key_statuses WHERE api_key_id = ? ORDER BY created_at DESC LIMIT 1` (uses composite index)
-3. **Find all actions for a key** — `SELECT * FROM api_key_actions WHERE api_key_id = ? AND deleted_at IS NULL` (uses index on api_key_id)
-4. **Find a key by idempotency hash** — `SELECT * FROM idempotency_keys WHERE idempotency_key_hash = ?` (uses unique index)
-
-All of these are O(1) or O(log N) with the indexes defined above.
+| Query | Index used |
+|---|---|
+| Key by secret: `WHERE "SecretHash" = @hash` | `IX_ApiKeys_SecretHash` |
+| Key by idempotency key: `WHERE "IdempotencyKeyHash" = @hash` | `IX_IdempotencyKeys_IdempotencyKeyHash` |
+| Current status: `WHERE "ApiKeyId" = @id AND "DeletedAt" IS NULL ORDER BY "CreatedAt" DESC LIMIT 1` | `IX_ApiKeyStatuses_ApiKeyId_CreatedAt` |
+| Active actions: `WHERE "ApiKeyId" = @id AND "DeletedAt" IS NULL` | `IX_ApiKeyActions_ApiKeyId` / partial unique index |
 
 ---
 
 ## Setting up database privileges (production)
 
-In production, enforce immutability at the database layer by restricting the application user's privileges:
+**Recommended, not yet applied.** To enforce append-only at the database layer as well, restrict the application role (shown here as `app_user`). EF Core issues `UPDATE` for soft deletes, so three tables need a column-level `UPDATE` grant on `"DeletedAt"` only:
 
 ```sql
--- Application user can only insert new status records, never modify or delete
-REVOKE UPDATE, DELETE ON api_key_statuses FROM app_user;
-GRANT SELECT, INSERT ON api_key_statuses TO app_user;
+-- ApiKeys: insert-only, never updated after creation
+REVOKE UPDATE, DELETE ON "ApiKeys" FROM app_user;
+GRANT SELECT, INSERT ON "ApiKeys" TO app_user;
 
--- Application user can only insert new action grants, never modify or delete
-REVOKE UPDATE, DELETE ON api_key_actions FROM app_user;
-GRANT SELECT, INSERT ON api_key_actions TO app_user;
-
--- Application user can insert or select idempotency records, soft-delete only (update deleted_at)
-REVOKE DELETE ON idempotency_keys FROM app_user;
-GRANT SELECT, INSERT, UPDATE ON idempotency_keys TO app_user;
-
--- api_keys has no deleted_at column at all — insert-only, never updated after creation
-REVOKE UPDATE, DELETE ON api_keys FROM app_user;
-GRANT SELECT, INSERT ON api_keys TO app_user;
+-- Soft-deletable tables: insert, and set DeletedAt only
+REVOKE UPDATE, DELETE ON "ApiKeyStatuses", "ApiKeyActions", "IdempotencyKeys" FROM app_user;
+GRANT SELECT, INSERT ON "ApiKeyStatuses", "ApiKeyActions", "IdempotencyKeys" TO app_user;
+GRANT UPDATE ("DeletedAt") ON "ApiKeyStatuses", "ApiKeyActions", "IdempotencyKeys" TO app_user;
 ```
 
-These privileges ensure that even if the application layer is compromised, the database itself prevents tampering with audit history.
+Migrations would then need to run under a separate, more privileged role. With these grants in place, a compromised application layer still cannot rewrite or erase audit history.

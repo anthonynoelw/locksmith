@@ -45,7 +45,7 @@ There is no `{id}` path segment anywhere in the API. Every endpoint that acts on
 Every response carries an explicit `Cache-Control` directive — there is no unmarked default.
 
 - **Default:** `Cache-Control: no-store, no-cache, must-revalidate, max-age=0` plus `Pragma: no-cache`, applied by `ResponseCacheControlFilter` to every action, and separately by `GlobalExceptionHandler` to every error response (which is produced in middleware, outside the MVC result pipeline the filter runs in).
-- **`[Cacheable(60)]` actions:** `Cache-Control: private, max-age=60` and `Vary: X-Api-Key`. Applied only to the four `X-Api-Key`-resolved `GET` endpoints (current key, current status, status history, active actions) — their response depends on which key's secret was presented, so any cache must key on that header too.
+- **`[Cacheable]` actions:** `Cache-Control: private, max-age=<n>` and `Vary: X-Api-Key`, where `<n>` is `CacheSettings.ApiKeyReadSeconds` (config section `Cache`, default `60`). Only successful (2xx) results are cacheable. Applied only to the four `X-Api-Key`-resolved `GET` endpoints (current key, current status, status history, active actions) — their response depends on which key's secret was presented, so any cache must key on that header too.
 
 `GET .../all` (the bulk admin listing) is **not** cacheable — it isn't scoped to a single caller's key.
 
@@ -78,7 +78,7 @@ Every rate-limited response carries:
 
 ## Key states
 
-A key moves through a defined set of states. The state history is stored in a separate append-only table (`api_key_statuses`), preserving every transition for audit purposes. See [ADR-001](../Decisions/ADR-001-api-key-lifecycle.md).
+A key moves through a defined set of states. The state history is stored in a separate append-only table (`ApiKeyStatuses`), preserving every transition for audit purposes. See [ADR-001](../Decisions/ADR-001-api-key-lifecycle.md).
 
 | State | Meaning |
 |---|---|
@@ -108,14 +108,16 @@ Creates a new API key in `Inactive` state. Generates a random secret and a rando
 ```json
 {
   "expiresAt": "2026-09-01T12:00:00Z",
-  "actions": ["Read", "Write"]
+  "actions": [0, 1]
 }
 ```
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `expiresAt` | `string` (ISO 8601) | No | Moment the key expires. Must be in the future. Defaults to 30 days from creation when omitted. |
-| `actions` | `string[]` | No | Actions to grant on the new key. Valid values: `Read`, `Write`, `Delete`, `Execute`. Duplicates are deduplicated. Defaults to none. |
+| `actions` | `integer[]` | No | Actions to grant on the new key, as enum numbers: `0` = `Read`, `1` = `Write`, `2` = `Delete`, `3` = `Execute`. Duplicates are deduplicated. Defaults to none. |
+
+> **Enums in request bodies are integers.** No `JsonStringEnumConverter` is registered, so a name such as `"Read"` fails model binding with `422`. Responses always return enum *names* as strings (`"status": "Active"`, `"action": "Read"`). Route segments (`/actions/{actionName}`) take names — see [Grant a single action](#grant-a-single-action).
 
 **Response 201 — created**
 
@@ -152,7 +154,7 @@ Returned when `expiresAt` is not in the future:
 GET /api/v{version}/api-key
 ```
 
-Returns metadata for the key identified by the `X-Api-Key` header. `[Cacheable(60)]`.
+Returns metadata for the key identified by the `X-Api-Key` header. `[Cacheable]`.
 
 **Headers**
 
@@ -174,7 +176,7 @@ Returns metadata for the key identified by the `X-Api-Key` header. `[Cacheable(6
 }
 ```
 
-`status` is the most recent non-deleted row in `api_key_statuses`; `actions` excludes soft-deleted grants. `createdBy` is always the constant `"api-client"` — it is never the bearer token itself.
+`status` is the most recent non-deleted row in `ApiKeyStatuses`; `actions` excludes soft-deleted grants. `createdBy` is always the constant `"api-client"` — it is never the bearer token itself.
 
 **Response 400** — `X-Api-Key` header missing, blank, or duplicated.
 **Response 404** — no key matches the presented secret, or the key has since been deleted (see [Delete a key](#delete-a-key)).
@@ -316,7 +318,15 @@ Identified by `idempotencyKey` in the body (not a header, and not a URL segment)
 **Response 204** — success.
 **Response 404** — no key matches the provided `idempotencyKey`.
 
-> **Note:** this does not remove the `api_keys` row itself — `ApiKey` has no `DeletedAt` column and is never modified after creation (see [database.md](database.md)). "Delete" makes the key functionally unreachable: its idempotency key no longer resolves (so retrieve/rotate/status-update/action grants against it 404), and `GET /api-key`, `GET /api-key/status`, and `GET /api-key/status/history` for it 404 too, because no non-deleted status row remains. `POST /api-key/validate` is the exception — see the note on that endpoint above.
+> **Note:** this does not remove the `ApiKeys` row itself — `ApiKey` has no `DeletedAt` column and is never modified after creation (see [database.md](database.md)). "Delete" makes the key unusable for management: its idempotency key no longer resolves, so retrieve/rotate/status-update/action changes against it return `404`. The old secret still resolves through `X-Api-Key`, though, because the `ApiKeys` row remains:
+>
+> | Endpoint (with the deleted key's secret) | Result |
+> |---|---|
+> | `GET /api-key` | `404` — no non-deleted status row remains |
+> | `GET /api-key/status` | `404` — same reason |
+> | `GET /api-key/status/history` | `200` — the full history, every row now soft-deleted |
+> | `GET /api-key/actions` | `200` — an empty list |
+> | `POST /api-key/validate` | `200` — see the note on that endpoint above |
 
 ---
 
@@ -330,7 +340,7 @@ Routes are under the same `/api/v{version}/api-key` prefix, with a `status` segm
 GET /api/v{version}/api-key/status
 ```
 
-Identified by the `X-Api-Key` header. `[Cacheable(60)]`.
+Identified by the `X-Api-Key` header. `[Cacheable]`.
 
 **Response 200**
 
@@ -353,7 +363,7 @@ Identified by the `X-Api-Key` header. `[Cacheable(60)]`.
 GET /api/v{version}/api-key/status/history
 ```
 
-Identified by the `X-Api-Key` header. `[Cacheable(60)]`. Returns every status row ever recorded for the key, including soft-deleted ones, oldest first.
+Identified by the `X-Api-Key` header. `[Cacheable]`. Returns every status row ever recorded for the key, including soft-deleted ones, oldest first.
 
 **Response 200**
 
@@ -380,10 +390,10 @@ Identified by `idempotencyKey` in the body. Soft-deletes the current status row 
 **Request body**
 
 ```json
-{ "idempotencyKey": "...", "status": "Active" }
+{ "idempotencyKey": "...", "status": 1 }
 ```
 
-`status` accepts the enum by name or number (`Inactive` / `0`, `Active` / `1`, `Revoked` / `2`, `Expired` / `3`).
+`status` is the enum **number**: `0` = `Inactive`, `1` = `Active`, `2` = `Revoked`, `3` = `Expired` (names are rejected — see the note under [Issue a key](#issue-a-key)).
 
 **Response 200** — no body.
 **Response 404** — no key matches the provided `idempotencyKey`.
@@ -402,7 +412,7 @@ Routes are under the same `/api/v{version}/api-key` prefix, with an `actions` se
 GET /api/v{version}/api-key/actions
 ```
 
-Identified by the `X-Api-Key` header. `[Cacheable(60)]`. Excludes revoked (soft-deleted) grants.
+Identified by the `X-Api-Key` header. `[Cacheable]`. Excludes revoked (soft-deleted) grants.
 
 **Response 200**
 
@@ -429,10 +439,10 @@ Identified by `idempotencyKey` in the body. Diffs the requested set against the 
 **Request body**
 
 ```json
-{ "idempotencyKey": "...", "actions": ["Read", "Execute"] }
+{ "idempotencyKey": "...", "actions": [0, 3] }
 ```
 
-An empty `actions` array revokes everything.
+`actions` uses the enum numbers (`0` = `Read`, `1` = `Write`, `2` = `Delete`, `3` = `Execute`). An empty array revokes everything.
 
 **Response 200** — the resulting active actions, same shape as [List currently granted actions](#list-currently-granted-actions).
 **Response 404** — no key matches the provided `idempotencyKey`.
@@ -512,12 +522,19 @@ Always returns `Healthy` as long as the process is running. No dependency checks
 GET /health/ready
 ```
 
-Runs checks tagged `"READY"` (EF Core database, Redis cache). Returns `Healthy` only when all dependencies are reachable. Use for container readiness probes.
+Runs checks tagged `READY` — the EF Core `AppDbContext` check and the Redis check (entry names `AppDbContext` and `redis`). Returns `Healthy` only when all dependencies are reachable. Use for container readiness probes.
 
 **Response 200 — ready**
 
 ```json
-{ "status": "Healthy", "totalDuration": "00:00:00.012", "entries": {} }
+{
+  "status": "Healthy",
+  "totalDuration": "00:00:00.012",
+  "entries": {
+    "AppDbContext": { "status": "Healthy", "...": "..." },
+    "redis": { "status": "Healthy", "...": "..." }
+  }
+}
 ```
 
 **Response 503 — not ready**
@@ -527,7 +544,8 @@ Runs checks tagged `"READY"` (EF Core database, Redis cache). Returns `Healthy` 
   "status": "Unhealthy",
   "totalDuration": "00:00:05.000",
   "entries": {
-    "database": { "status": "Unhealthy", "description": "Connection refused" }
+    "AppDbContext": { "status": "Unhealthy", "...": "..." },
+    "redis": { "status": "Healthy", "...": "..." }
   }
 }
 ```
