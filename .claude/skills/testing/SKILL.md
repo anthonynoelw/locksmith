@@ -126,33 +126,28 @@ await act.Should().ThrowExactlyAsync<OutOfStockException>();
 
 ---
 
-## Project structure
+## Project structure (this repository)
 
 ```
-tests/
-├── MyApp.UnitTests/
-│   ├── Services/
-│   │   └── OrderServiceTests.cs
-│   ├── Domain/
-│   │   └── OrderTests.cs
-│   └── MyApp.UnitTests.csproj
-├── MyApp.IntegrationTests/
-│   ├── Repositories/
-│   │   └── OrderRepositoryTests.cs
-│   ├── Infrastructure/
-│   │   └── DbContextTests.cs
-│   └── MyApp.IntegrationTests.csproj
-└── MyApp.ApplicationTests/
-    ├── Fixtures/
-    │   ├── ApplicationFixture.cs          ← boots WebApplicationFactory + DB
-    │   └── ApplicationFixtureCollection.cs
-    ├── DataSeeders/
-    │   ├── OrderSeeder.cs
-    │   └── CustomerSeeder.cs
-    ├── Orders/
-    │   └── CreateOrderTests.cs
-    └── MyApp.ApplicationTests.csproj
+Tests/
+├── Unit/                                  ← Unit.csproj (xUnit + Moq + FluentAssertions)
+│   ├── Services/, Services/Actions/, Services/Status/
+│   ├── Filters/, Handler/, Crypto/, RateLimiting/, Requests/
+│   └── *TestData.cs                       ← shared test-data builders per area
+├── Integration/                           ← Integration.csproj (Testcontainers Redis)
+│   └── RateLimiting/RedisSlidingWindowRateLimiterTests.cs
+└── Application/                           ← Tests.Application.csproj
+    ├── Infrastructure/
+    │   ├── ApplicationFixture.cs          ← WebApplicationFactory + Testcontainers Postgres
+    │   ├── ApplicationTestBase.cs
+    │   ├── CollectionDefinition.cs
+    │   └── Fake*.cs                       ← test doubles (rate limiter, secret lookup)
+    ├── Endpoints/ApiKeys/, Endpoints/Errors/, Endpoints/Health/
+    └── Smoke/
 ```
+
+Integration and Application tests need a running Docker daemon. No `DataSeeder` classes exist yet —
+application tests currently create data through the API itself.
 
 ---
 

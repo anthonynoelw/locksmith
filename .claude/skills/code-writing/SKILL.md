@@ -97,7 +97,11 @@ public sealed record Money(decimal Amount, string Currency)
 }
 ```
 
-### Minimal API endpoint group (preferred over controllers for new code)
+### Minimal API endpoint group
+
+> **This repository uses MVC controllers, not Minimal APIs.** New endpoints go in a controller under
+> `Src/Api/Controllers/V1/` that inherits the base `Controller` (versioned route template + `[Authorize]`).
+> The pattern below is reference only, for projects that use Minimal APIs.
 
 ```csharp
 public static class OrderEndpoints

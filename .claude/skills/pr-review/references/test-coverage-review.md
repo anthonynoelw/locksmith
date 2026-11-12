@@ -14,12 +14,13 @@ that is a coverage gap — record it as a finding.
 
 | Changed file type | Required test file | Test level |
 |---|---|---|
-| `Services/OrderService.cs` | `UnitTests/Services/OrderServiceTests.cs` | Unit |
-| `Repositories/OrderRepository.cs` | `IntegrationTests/Repositories/OrderRepositoryTests.cs` | Integration |
-| `Controllers/OrdersController.cs` or endpoint group | `ApplicationTests/Orders/CreateOrderTests.cs` (etc.) | Application |
-| `Domain/Order.cs` (entity with rules) | `UnitTests/Domain/OrderTests.cs` | Unit |
-| `Migrations/20240615_*.cs` | `IntegrationTests/Migrations/MigrationTests.cs` | Integration |
-| `Middleware/*.cs` | `ApplicationTests/Middleware/*Tests.cs` | Application |
+| `Src/Application/Services/**/*Service.cs` | `Tests/Unit/Services/**/<ClassName>Tests.cs` | Unit |
+| `Src/Api/Filters/*.cs` | `Tests/Unit/Filters/<ClassName>Tests.cs` | Unit |
+| `Src/Infrastructure/Repositories/*.cs`, `Src/Infrastructure/RateLimiting/*.cs` | `Tests/Integration/<Folder>/<ClassName>Tests.cs` | Integration |
+| `Src/Api/Controllers/V1/*Controller.cs` | `Tests/Application/Endpoints/ApiKeys/<Action>EndpointTests.cs` | Application |
+| `Src/Domain/Models/*.cs` (entity with rules) | `Tests/Unit/Domain/<EntityName>Tests.cs` | Unit |
+| `Src/Infrastructure/Migrations/*.cs` | `Tests/Integration/Migrations/MigrationTests.cs` | Integration |
+| `Src/Api/Exceptions/*.cs`, middleware | `Tests/Unit/Handler/*Tests.cs` and `Tests/Application/Endpoints/Errors/*Tests.cs` | Unit + Application |
 | Bug fix in any layer | Regression test that fails before the fix | Matching level |
 
 ---

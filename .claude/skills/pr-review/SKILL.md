@@ -107,9 +107,9 @@ dotnet test --collect:"XPlat Code Coverage" --results-directory ./test-results
 dotnet test --verbosity minimal | grep -E "FAIL|Error|Exception"
 
 # Run a specific project
-dotnet test tests/MyApp.UnitTests
-dotnet test tests/MyApp.IntegrationTests
-dotnet test tests/MyApp.ApplicationTests
+dotnet test Tests/Unit/Unit.csproj
+dotnet test Tests/Integration/Integration.csproj          # needs Docker (Testcontainers Redis)
+dotnet test Tests/Application/Tests.Application.csproj    # needs Docker (Testcontainers Postgres)
 ```
 
 For each missing test or quality violation, record: **what is untested**, **which test type is needed**, **example test name**.

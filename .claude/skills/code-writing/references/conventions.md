@@ -673,24 +673,28 @@ Always include a ticket or author reference:
 
 ## 11. Project and solution structure
 
-### Recommended solution layout
+### Solution layout (this repository)
 
 ```
-YourSolution/
+locksmith/
 ├── Src/
-│   ├── YourApp.Api/                  # Minimal API / controllers, middleware, Program.cs
-│   ├── YourApp.Application/          # Services, use cases, validators, DTOs
-│   ├── YourApp.Domain/               # Entities, value objects, domain events, enums
-│   └── YourApp.Infrastructure/       # EF Core, repositories, external HTTP clients
-├── tests/
-│   ├── YourApp.UnitTests/            # Pure unit tests, no I/O
-│   ├── YourApp.IntegrationTests/     # Tests that hit real DB or external services
-│   └── YourApp.ArchitectureTests/    # NetArchTest rules (enforce layer boundaries)
-├── .claude/
-│   └── skills/
-├── YourSolution.sln
-└── Directory.Build.props             # Shared MSBuild properties (Nullable, TreatWarningsAsErrors, etc.)
+│   ├── Api/              # ASP.NET Core MVC controllers, filters, auth handler, Program.cs
+│   ├── Agent/            # Worker Service executable (background jobs)
+│   ├── Application/      # Services, commands, repository/service interfaces, Settings/
+│   ├── Domain/           # Entities, enums, domain exceptions, WellKnown constants
+│   └── Infrastructure/   # EF Core AppDbContext, migrations, repositories, Redis rate limiter
+├── Tests/
+│   ├── Unit/             # Unit.csproj — Moq, no I/O
+│   ├── Integration/      # Integration.csproj — Testcontainers (Redis)
+│   └── Application/      # Tests.Application.csproj — WebApplicationFactory + Testcontainers Postgres
+├── Docker/Dockerfile
+├── docker-compose.yml
+├── Solution.slnx
+├── Directory.Build.props
+└── Directory.Packages.props   # Central NuGet package versions
 ```
+
+Project namespaces carry no product prefix (`Api.Filters`, `Application.Services`, `Infrastructure.Data`).
 
 ### Configuration / Options pattern
 
@@ -715,7 +719,7 @@ Wire in `ServiceExtensions`:
 // Src/Api/Extensions/ServiceExtensions.cs
 builder.Services
     .AddOptions<ApiSettings>()
-    .BindConfiguration(WellKnown.ConfigSections.Api)
+    .BindConfiguration(WellKnown.ConfigSections.API)
     .ValidateDataAnnotations()
     .ValidateOnStart();
 ```
@@ -726,8 +730,11 @@ builder.Services
 // Src/Domain/WellKnown.cs
 public static class ConfigSections
 {
-    public const string Api = "Api";
-    public const string Agent = "Agent";
+    public const string API = "API";
+    public const string AGENT = "AGENT";
+    public const string CRYPTOGRAPHY = "Cryptography";
+    public const string CACHE = "Cache";
+    public const string RATE_LIMITING = "RateLimiting";
 }
 ```
 
