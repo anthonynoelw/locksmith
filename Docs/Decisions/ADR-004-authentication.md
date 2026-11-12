@@ -1,8 +1,8 @@
 # ADR-004: Authentication
 
-**Status:** Pending  
-**Date:** 2025-06-02
-**Related concept:** Concept 4 — User Authentication
+**Status:** Accepted  
+**Date:** 2026-06-02  
+**Related concept:** [Concept 004 — Authentication](../Concepts/concept-004-authentication.md)
 
 ---
 
@@ -35,8 +35,12 @@ This decision defends against unauthenticated access to the key management surfa
 
 Simpler to implement and operate than any alternative: there is no user model to design, no token issuance endpoint to secure, and no external service dependency. Rotation is operationally straightforward but requires coordinating both caller and server simultaneously since there is no grace period or per-client key. Scaling to multiple independent callers is not possible without a full redesign — the single-secret model has no concept of caller identity. This creates an obligation to revisit authentication before onboarding a second consumer.
 
-## What this taught me
+## Implementation notes (v1.1.1)
 
-Write 2–4 sentences in your own words. What did implementing this decision
-teach you about how secure systems are designed? This is a learning journal,
-not just a reference document — the reflection section is not optional.
+How the decision was built:
+
+- **Handler:** `BearerTokenAuthenticationHandler`, a custom ASP.NET Core `AuthenticationHandler<T>` registered as the `Bearer` scheme. It compares the presented token to `ApiSettings.BearerToken` with `CryptographicOperations.FixedTimeEquals`; a missing or wrong token gets `401` with `WWW-Authenticate: Bearer`.
+- **Enforcement:** `[Authorize]` sits on the base `Controller` class, so every versioned endpoint inherits it. `/health` and `/health/ready` are mapped outside the controllers and stay unauthenticated.
+- **Configuration:** the token comes from configuration (`Api__BearerToken` environment variable) and is `[Required]`, so the API refuses to start without it. It is not committed in any `appsettings*.json`.
+- **Audit identity:** because there is one shared secret, every row's `CreatedBy` is the constant `api-client`; the token itself is never persisted.
+- **Still open:** redaction of the `Authorization` header in logs, and the per-client API key upgrade — both tracked in [TODO.md](../TODO.md).

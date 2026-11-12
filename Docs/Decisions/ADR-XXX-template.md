@@ -45,9 +45,3 @@ write "None."
 
 What becomes easier because of this decision? What becomes harder? What new
 obligations does this decision create for future development?
-
-## What this taught me
-
-Write 2–4 sentences in your own words. What did implementing this decision
-teach you about how secure systems are designed? This is a learning journal,
-not just a reference document — the reflection section is not optional.
